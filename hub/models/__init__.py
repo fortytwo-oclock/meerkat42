@@ -1,6 +1,6 @@
 """SQLAlchemy models for the Hub persistence layer."""
 from hub.models.alert import AlertEvent, AlertRule, NotificationChannel
-from hub.models.auth import ApiToken, Role
+from hub.models.auth import AgentEnrollmentToken, ApiToken, Role
 from hub.models.billing import BillingSubscription, IssuedLicense, StripeWebhookEvent
 from hub.models.license import LicenseRecord
 from hub.models.metric import MetricPoint, MetricRollup
@@ -17,6 +17,7 @@ __all__ = [
     "AlertEvent",
     "NotificationChannel",
     "ApiToken",
+    "AgentEnrollmentToken",
     "Role",
     "BillingSubscription",
     "StripeWebhookEvent",

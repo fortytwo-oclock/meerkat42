@@ -117,6 +117,10 @@ replicas, so WebSocket session affinity is not required. See
   digest checks, immutable digest-pin handling, registry allowlisting, bounded
   refresh work, cached failure retries, fleet/node badges, and an alert-rule
   metric. Authenticated private registries remain an explicit future extension.
+- **Phase 7 — Tenant-safe enrollment:** ✅ expiring/revocable enrollment tokens
+  bound to one tenant and client group, one-time secret display, last-use audit,
+  tenant-specific offline license enforcement, root tenant selection, and
+  fail-closed cross-tenant node-ID collision handling.
 
 ## Verification
 

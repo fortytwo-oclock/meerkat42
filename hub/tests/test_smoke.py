@@ -57,6 +57,21 @@ class HubSmokeTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "healthy")
 
+    def test_agent_enrollment_token_is_shown_once_and_revocable(self) -> None:
+        created = self.client.post(
+            "/api/v1/agent-tokens",
+            json={"name": "test agent", "group_slug": "default", "expires_in_days": 30},
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        body = created.json()
+        self.assertTrue(body["token"].startswith("cpa_"))
+        listed = self.client.get("/api/v1/agent-tokens")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        match = next(row for row in listed.json()["tokens"] if row["id"] == body["id"])
+        self.assertNotIn("token", match)
+        revoked = self.client.delete(f"/api/v1/agent-tokens/{body['id']}")
+        self.assertEqual(revoked.status_code, 200, revoked.text)
+
     def test_stripe_subscription_issues_license_idempotently(self) -> None:
         timestamp = int(time.time())
         event = {
@@ -148,6 +163,9 @@ class HubSmokeTest(unittest.TestCase):
         download = self.client.get("/api/v1/billing/license")
         self.assertEqual(download.status_code, 200)
         self.assertEqual(download.json()["claims"]["tier"], "enterprise")
+        active_license = self.client.get("/api/v1/license")
+        self.assertEqual(active_license.status_code, 200, active_license.text)
+        self.assertEqual(active_license.json()["active_tier"], "enterprise")
         self.assertEqual(download.json()["delivery_status"], "PENDING")
         retry = self.client.post("/api/v1/billing/license/retry")
         self.assertEqual(retry.status_code, 200, retry.text)

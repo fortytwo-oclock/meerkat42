@@ -9,7 +9,8 @@ services:
     environment:
       - HUB_URL=wss://hub.yourdomain.com/api/v1/agent/stream
       - NODE_ID=proxmox-node-01
-      - AUTH_TOKEN=agent_secret_token_change_me
+      # Use the one-time cpa_... value created for this tenant/client group.
+      - AUTH_TOKEN=cpa_replace_with_enrollment_token
       - CLIENT_GROUP=Client-Apex
       - PUSH_INTERVAL_SEC=10
       # Optional registry digest checks through the Docker Engine API. Checks are

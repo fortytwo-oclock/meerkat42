@@ -1,7 +1,6 @@
 """Outbound agent WebSocket: handshake, telemetry ingestion, persistence, alerting."""
 from __future__ import annotations
 
-import hmac
 import json
 import logging
 from datetime import datetime, timezone
@@ -9,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from hub.config import get_settings
+from hub.agent_auth import authenticate_agent
 from hub.db.session import session_scope
 from hub.repositories import alerts as alerts_repo
 from hub.repositories import nodes as nodes_repo
@@ -25,21 +25,26 @@ router = APIRouter()
 async def agent_stream(websocket: WebSocket) -> None:
     await websocket.accept()
     app = websocket.app
-    lm = app.state.license_manager
     store = app.state.metric_store
-    tenant_id = app.state.default_tenant_id
     settings = get_settings()
 
     client_ip = websocket.client.host if websocket.client else "unknown"
 
-    # 1. Authenticate the agent against the shared bootstrap token.
+    # 1. Resolve a tenant/group-bound agent identity. The legacy shared token is
+    #    accepted only for the default self-hosted tenant.
     presented = websocket.headers.get("x-auth-token", "")
-    if settings.agent_bootstrap_token and not hmac.compare_digest(
-        presented, settings.agent_bootstrap_token
-    ):
+    async with session_scope() as session:
+        identity = await authenticate_agent(
+            session,
+            presented=presented,
+            default_tenant_id=app.state.default_tenant_id,
+            settings=settings,
+        )
+    if identity is None:
         await websocket.send_json({"error": "UNAUTHORIZED", "message": "invalid agent token"})
         await websocket.close(code=4401)
         return
+    tenant_id = identity.tenant_id
 
     # 2. Handshake first — the node identity we trust is the handshake's, and it
     #    is pinned for the rest of the connection (later frames can't reassign it).
@@ -56,7 +61,22 @@ async def agent_stream(websocket: WebSocket) -> None:
 
     # 3. License node-limit check against the identity we will actually persist.
     async with session_scope() as session:
+        if await nodes_repo.belongs_to_other_tenant(session, tenant_id, node_id):
+            await websocket.send_json(
+                {
+                    "error": "NODE_ID_CONFLICT",
+                    "message": "node_id is already registered to another tenant",
+                }
+            )
+            await websocket.close(code=4409)
+            return
         existing = await nodes_repo.existing_ids_for_tenant(session, tenant_id)
+        from hub.repositories import licenses as license_repo
+        from hub.license_manager import LicenseManager
+
+        record = await license_repo.get_active(session, tenant_id)
+        lm = LicenseManager()
+        lm.load_from_record(record.raw_token if record else None, {})
     if not lm.can_register_node(len(existing), node_id, existing):
         await websocket.send_json(
             {
@@ -67,7 +87,8 @@ async def agent_stream(websocket: WebSocket) -> None:
         await websocket.close(code=4003)
         return
 
-    if not await bus.claim_agent(node_id, websocket):
+    connection_id = f"{tenant_id}:{node_id}"
+    if not await bus.claim_agent(connection_id, websocket):
         log.warning("node %s already has a live connection; rejecting duplicate", node_id)
         await websocket.send_json({"error": "ALREADY_CONNECTED", "message": "node already streaming"})
         await websocket.close(code=4409)
@@ -81,7 +102,7 @@ async def agent_stream(websocket: WebSocket) -> None:
                 tenant_id=tenant_id,
                 node_id=node_id,
                 hostname=handshake.get("hostname", "unknown"),
-                client_group=handshake.get("client_group", "default"),
+                client_group=identity.group_slug or handshake.get("client_group", "default"),
                 agent_version=handshake.get("agent_version", "1.0.0"),
                 remote_ip=client_ip,
             )
@@ -123,7 +144,7 @@ async def agent_stream(websocket: WebSocket) -> None:
     except Exception:  # pragma: no cover
         log.exception("stream error for node %s", node_id)
     finally:
-        await bus.release_agent(node_id, websocket)
+        await bus.release_agent(connection_id, websocket)
 
 
 async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> None:

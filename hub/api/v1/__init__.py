@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from hub.api.v1 import (
     alerts,
+    agent_tokens,
     branding,
     billing,
     channels,
@@ -22,6 +23,7 @@ api_router.include_router(licenses.router, tags=["license"])
 api_router.include_router(groups.router, tags=["groups"])
 api_router.include_router(nodes.router, tags=["nodes"])
 api_router.include_router(alerts.router, tags=["alerts"])
+api_router.include_router(agent_tokens.router, tags=["agent-tokens"])
 api_router.include_router(channels.router, tags=["channels"])
 api_router.include_router(tokens.router, tags=["tokens"])
 api_router.include_router(vault.router, tags=["vault"])

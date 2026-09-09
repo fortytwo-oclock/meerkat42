@@ -29,6 +29,15 @@ async def get_for_tenant(
     return rows.scalar_one_or_none()
 
 
+async def belongs_to_other_tenant(
+    session: AsyncSession, tenant_id: str, node_id: str
+) -> bool:
+    node = await session.get(Node, node_id)
+    if node is None:
+        return False
+    return await get_for_tenant(session, tenant_id, node_id) is None
+
+
 async def list_for_tenant(
     session: AsyncSession, tenant_id: str, group_slug: str | None = None
 ) -> list[Node]:
@@ -78,6 +87,8 @@ async def upsert_handshake(
     if node is None:
         node = Node(node_id=node_id, group_id=group.id, first_seen=now)
         session.add(node)
+    elif await get_for_tenant(session, tenant_id, node_id) is None:
+        raise ValueError("node_id is already registered to another tenant")
     node.hostname = hostname or node.hostname
     node.agent_version = agent_version or node.agent_version
     node.remote_ip = remote_ip

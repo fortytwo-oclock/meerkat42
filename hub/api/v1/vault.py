@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.config import get_settings
 from hub.db.session import get_session
-from hub.deps import Principal, get_license_manager, get_tenant_id, require_admin
+from hub.deps import Principal, get_tenant_id, get_tenant_license_manager, require_admin
 from hub.license_manager import LicenseManager
 from hub.repositories import nodes as nodes_repo
 from hub.repositories import vault as vault_repo
@@ -46,7 +46,7 @@ async def request_backup(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     principal: Principal = Depends(require_admin),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
 ) -> dict:
     _require_vault(lm)
     node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
@@ -57,6 +57,7 @@ async def request_backup(
         node_id,
         "request_config_backup",
         {"timeout_sec": _settings.vault_backup_timeout_seconds},
+        tenant_id=tenant_id,
     )
     if command_id is None:
         raise HTTPException(status_code=409, detail="Node has no active connection")
@@ -78,7 +79,7 @@ async def list_backups(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     _: Principal = Depends(require_admin),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
 ) -> dict:
     _require_vault(lm)
     rows = await vault_repo.list_for_node(session, tenant_id, node_id)
@@ -91,7 +92,7 @@ async def get_backup(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     _: Principal = Depends(require_admin),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
 ) -> dict:
     _require_vault(lm)
     b = await vault_repo.get_for_tenant(session, tenant_id, backup_id)

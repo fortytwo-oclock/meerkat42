@@ -41,3 +41,24 @@ class ApiToken(Base):
     created_by: Mapped[str] = mapped_column(String(200), default="owner")
     last_used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
+
+
+class AgentEnrollmentToken(Base):
+    """Tenant/group-bound agent credential; only a SHA-256 digest is stored."""
+
+    __tablename__ = "agent_enrollment_tokens"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    group_id: Mapped[str] = mapped_column(
+        ForeignKey("client_groups.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = created_at_col()
+    created_by: Mapped[str] = mapped_column(String(200), default="owner")
+    expires_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)

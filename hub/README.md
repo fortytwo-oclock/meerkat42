@@ -85,6 +85,7 @@ uvicorn hub.main:app --reload --port 8080
 - `GET  /api/v1/alerts` / `POST /api/v1/alerts/{id}/ack`
 - `GET/POST/DELETE /api/v1/alert-rules`
 - `GET/POST/DELETE /api/v1/groups`
+- `GET/POST/DELETE /api/v1/agent-tokens` — group-bound agent enrollment
 - `GET/POST /api/v1/license` — offline verify + persist
 - `POST /api/v1/billing/stripe/webhook` — verified, idempotent subscription events
 - `GET  /api/v1/billing/plans` — configured plans safe for dashboard display
@@ -159,6 +160,22 @@ API cannot duplicate background work. Caddy terminates TLS and balances WebSocke
 connections through Docker's service network. A multi-host deployment
 should point the same stack at managed PostgreSQL and Redis and place a global
 WebSocket-capable load balancer in front; no session affinity is required.
+
+## Tenant-safe agent enrollment
+
+Owners create an enrollment token for one client group at
+`POST /api/v1/agent-tokens`; its `cpa_...` secret is returned only once. The Hub
+stores only its SHA-256 digest. On connection, the token fixes both tenant and
+group, regardless of values in the agent handshake. Tokens can expire, be
+revoked, and expose last-use time to their owner. Once any enrollment token
+exists, anonymous agent connections fail closed. `AGENT_BOOTSTRAP_TOKEN` remains
+a compatibility path for the default self-hosted tenant only.
+
+The platform `ADMIN_TOKEN` may select an existing tenant with
+`X-Tenant-Slug`; ordinary API tokens cannot override their tenant. Node IDs are
+currently globally unique across the Hub. A collision is rejected with
+`NODE_ID_CONFLICT`, so managed deployments should configure stable UUID-style
+`NODE_ID` values rather than hostnames alone.
 
 ## Alert dispatch (Phase 3)
 

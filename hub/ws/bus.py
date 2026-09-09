@@ -138,8 +138,14 @@ class EventBus:
                 log.warning("could not release Redis agent lease", exc_info=True)
 
     async def send_command(
-        self, node_id: str, action: str, payload: dict | None = None
+        self,
+        node_id: str,
+        action: str,
+        payload: dict | None = None,
+        *,
+        tenant_id: str | None = None,
     ) -> str | None:
+        connection_id = f"{tenant_id}:{node_id}" if tenant_id else node_id
         command_id = uuid.uuid4().hex
         frame = {
             "type": "command",
@@ -147,19 +153,19 @@ class EventBus:
             "action": action,
             "payload": payload or {},
         }
-        websocket = self._agents.get(node_id)
+        websocket = self._agents.get(connection_id)
         if websocket is not None:
             await websocket.send_json(frame)
             return command_id
         if self._redis is None:
             return None
         try:
-            instance_id = await self._redis.get(self._agent_key(node_id))
+            instance_id = await self._redis.get(self._agent_key(connection_id))
             if not instance_id:
                 return None
             delivered = await self._redis.publish(
                 self._commands_channel(instance_id),
-                json.dumps({"node_id": node_id, "frame": frame}),
+                json.dumps({"node_id": connection_id, "frame": frame}),
             )
             return command_id if delivered else None
         except Exception:
@@ -220,6 +226,10 @@ active_agents = bus._agents
 
 
 async def send_command(
-    node_id: str, action: str, payload: dict | None = None
+    node_id: str,
+    action: str,
+    payload: dict | None = None,
+    *,
+    tenant_id: str | None = None,
 ) -> str | None:
-    return await bus.send_command(node_id, action, payload)
+    return await bus.send_command(node_id, action, payload, tenant_id=tenant_id)

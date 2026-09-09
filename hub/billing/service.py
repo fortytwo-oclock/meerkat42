@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.billing.issuer import LicenseIssuanceError, issue_license
 from hub.config import Settings
+from hub.license_manager import COMMUNITY_CLAIMS
 from hub.models import IssuedLicense, StripeWebhookEvent
 from hub.repositories import billing as billing_repo
+from hub.repositories import licenses as license_repo
 from hub.repositories import tenants as tenants_repo
 
 SUPPORTED_SUBSCRIPTION_EVENTS = {
@@ -113,7 +115,12 @@ async def process_subscription_event(
         event_created=event_created,
     )
 
-    if not applied or status not in LICENSED_STATUSES:
+    if not applied:
+        return None
+    if status not in LICENSED_STATUSES:
+        await license_repo.set_active(
+            session, tenant.id, raw_token=None, claims=COMMUNITY_CLAIMS
+        )
         return None
     plan = settings.stripe_product_plans.get(product_id)
     if plan is None:
@@ -163,5 +170,8 @@ async def process_subscription_event(
         next_delivery_at=datetime.now(timezone.utc) if customer_email else None,
     )
     session.add(issued)
+    await license_repo.set_active(
+        session, tenant.id, raw_token=token, claims=claims
+    )
     await session.flush()
     return issued

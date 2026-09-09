@@ -94,6 +94,17 @@ export interface ApiTokenInfo {
   revoked: boolean;
 }
 
+export interface AgentTokenInfo {
+  id: string;
+  name: string;
+  group_slug: string;
+  created_at: string;
+  created_by: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  revoked: boolean;
+}
+
 export interface BackupMeta {
   id: string;
   node_id: string;
@@ -233,6 +244,15 @@ export const api = {
       body: JSON.stringify(body),
     }),
   revokeToken: (id: string) => j(`/api/v1/tokens/${id}`, { method: "DELETE" }),
+
+  agentTokens: () => j<{ tokens: AgentTokenInfo[] }>(`/api/v1/agent-tokens`),
+  createAgentToken: (body: Record<string, unknown>) =>
+    j<AgentTokenInfo & { token: string }>(`/api/v1/agent-tokens`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  revokeAgentToken: (id: string) =>
+    j(`/api/v1/agent-tokens/${id}`, { method: "DELETE" }),
 
   backups: (nodeId: string) =>
     j<{ backups: BackupMeta[] }>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/backups`),

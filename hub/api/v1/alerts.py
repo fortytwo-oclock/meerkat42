@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hub.db.session import get_session
 from hub.deps import (
     Principal,
-    get_license_manager,
+    get_tenant_license_manager,
     get_tenant_id,
     require_admin,
     viewer_scope,
@@ -99,7 +99,7 @@ async def create_rule(
     req: AlertRuleCreate,
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
     _: str = Depends(require_admin),
 ) -> dict:
     if lm.claims.get("tier") == "community" and not lm.has_feature("basic_alerts"):

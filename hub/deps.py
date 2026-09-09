@@ -18,6 +18,7 @@ from hub.timeseries import MetricStore
 
 
 def get_license_manager(request: Request) -> LicenseManager:
+    """Default-tenant manager for the public, pre-auth branding endpoint."""
     return request.app.state.license_manager
 
 
@@ -51,6 +52,7 @@ async def authenticate(
     session: AsyncSession = Depends(get_session),
     authorization: str | None = Header(default=None),
     x_admin_token: str | None = Header(default=None),
+    x_tenant_slug: str | None = Header(default=None),
 ) -> Principal:
     settings = get_settings()
     tenant_id = request.app.state.default_tenant_id
@@ -60,6 +62,16 @@ async def authenticate(
     if settings.admin_token and presented and hmac.compare_digest(
         presented, settings.admin_token
     ):
+        if x_tenant_slug:
+            from hub.models import Tenant
+
+            row = await session.execute(
+                select(Tenant.id).where(Tenant.slug == x_tenant_slug.strip().lower())
+            )
+            selected = row.scalar_one_or_none()
+            if selected is None:
+                raise HTTPException(status_code=404, detail="Tenant not found")
+            tenant_id = selected
         return Principal(Role.OWNER, tenant_id, None, "admin-token")
 
     # 2. Issued API token
@@ -105,6 +117,19 @@ async def get_tenant_id(
 ) -> str:
     """Resolve tenant scope from the authenticated principal."""
     return principal.tenant_id
+
+
+async def get_tenant_license_manager(
+    session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+) -> LicenseManager:
+    """Load and cryptographically re-verify the authenticated tenant's license."""
+    from hub.repositories import licenses as license_repo
+
+    record = await license_repo.get_active(session, tenant_id)
+    manager = LicenseManager()
+    manager.load_from_record(record.raw_token if record else None, {})
+    return manager
 
 
 def require_role(minimum: Role):

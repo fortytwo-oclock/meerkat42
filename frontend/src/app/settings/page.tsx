@@ -12,6 +12,7 @@ import {
   api,
   type AlertRule,
   type ApiTokenInfo,
+  type AgentTokenInfo,
   type BillingPlan,
   type BillingSubscription,
   type Channel,
@@ -30,6 +31,8 @@ export default function SettingsPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [tokens, setTokens] = useState<ApiTokenInfo[] | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [agentTokens, setAgentTokens] = useState<AgentTokenInfo[] | null>(null);
+  const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [billing, setBilling] = useState<BillingSubscription | null>(null);
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [checkoutEmail, setCheckoutEmail] = useState("");
@@ -56,6 +59,11 @@ export default function SettingsPage() {
       setTokens((await api.tokens()).tokens);
     } catch {
       setTokens(null); // not owner / not configured
+    }
+    try {
+      setAgentTokens((await api.agentTokens()).tokens);
+    } catch {
+      setAgentTokens(null);
     }
     try {
       setBilling(await api.billingSubscription());
@@ -435,6 +443,78 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {agentTokens !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Agent enrollment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {newAgentToken && (
+              <div className="rounded-md border border-emerald-600/40 bg-emerald-600/10 p-2 text-xs">
+                Copy now and set as the agent&apos;s AUTH_TOKEN — shown once:
+                <code className="ml-1 break-all font-mono">{newAgentToken}</code>
+              </div>
+            )}
+            {agentTokens.map((t) => (
+              <div key={t.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
+                <div>
+                  <span className="font-medium">{t.name}</span>{" "}
+                  <Badge variant="outline">{t.group_slug}</Badge>
+                  {t.revoked && <Badge variant="destructive">revoked</Badge>}
+                  <p className="text-xs text-muted-foreground">
+                    {t.expires_at ? `expires ${new Date(t.expires_at).toLocaleDateString()}` : "no expiry"}
+                    {t.last_used_at ? ` · last used ${new Date(t.last_used_at).toLocaleString()}` : " · never used"}
+                  </p>
+                </div>
+                {!t.revoked && (
+                  <Button size="sm" variant="ghost" onClick={() => guard(() => api.revokeAgentToken(t.id))}>
+                    Revoke
+                  </Button>
+                )}
+              </div>
+            ))}
+            <NewAgentTokenForm
+              onCreate={async (body) => {
+                try {
+                  const result = await api.createAgentToken(body);
+                  setNewAgentToken(result.token);
+                  await load();
+                } catch (e: any) {
+                  setErr(e.message);
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function NewAgentTokenForm({ onCreate }: { onCreate: (b: Record<string, unknown>) => void }) {
+  const [name, setName] = useState("");
+  const [groupSlug, setGroupSlug] = useState("default");
+  const [expires, setExpires] = useState("90");
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
+      <Input className="w-40" placeholder="Agent token name" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input className="w-36" placeholder="group slug" value={groupSlug} onChange={(e) => setGroupSlug(e.target.value)} />
+      <Input className="w-28" type="number" min="1" max="365" value={expires} onChange={(e) => setExpires(e.target.value)} />
+      <Button
+        size="sm"
+        disabled={!name.trim() || !groupSlug.trim()}
+        onClick={() => {
+          onCreate({
+            name: name.trim(),
+            group_slug: groupSlug.trim(),
+            expires_in_days: expires ? Number(expires) : null,
+          });
+          setName("");
+        }}
+      >
+        Create enrollment token
+      </Button>
     </div>
   );
 }

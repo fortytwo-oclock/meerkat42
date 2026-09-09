@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_license_manager, get_tenant_id, require_admin
+from hub.deps import get_tenant_id, get_tenant_license_manager, require_admin
 from hub.license_manager import LicenseError, LicenseManager
 from hub.repositories import licenses as lic_repo
 from hub.repositories import nodes as nodes_repo
@@ -16,7 +16,7 @@ router = APIRouter()
 @router.get("/license")
 async def get_license(
     session: AsyncSession = Depends(get_session),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
     count = await nodes_repo.count_for_tenant(session, tenant_id)
@@ -37,7 +37,7 @@ async def get_license(
 async def apply_license(
     req: LicenseSubmit,
     session: AsyncSession = Depends(get_session),
-    lm: LicenseManager = Depends(get_license_manager),
+    lm: LicenseManager = Depends(get_tenant_license_manager),
     tenant_id: str = Depends(get_tenant_id),
     _: str = Depends(require_admin),
 ) -> dict:
@@ -45,6 +45,8 @@ async def apply_license(
         claims = lm.apply(req.license_token)
     except LicenseError as exc:
         raise HTTPException(status_code=400, detail=f"License verification failed: {exc}")
+    if claims.get("sub") and claims["sub"] != tenant_id:
+        raise HTTPException(status_code=400, detail="License belongs to another tenant")
     await lic_repo.set_active(
         session, tenant_id, raw_token=req.license_token, claims=claims
     )
