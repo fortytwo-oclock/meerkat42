@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class LicenseSubmit(BaseModel):
+    license_token: str
+
+
+class GroupCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    metric: str
+    comparator: str = "gt"
+    threshold: Optional[float] = None
+    duration_sec: int = 0
+    severity: str = "WARNING"
+    group_slug: Optional[str] = None
+    enabled: bool = True
+
+
+class AckRequest(BaseModel):
+    acknowledged_by: str = "operator"
+
+
+class NodeSummary(BaseModel):
+    node_id: str
+    hostname: str
+    client_group: str
+    status: str
+    last_seen: Optional[datetime]
+    cpu_usage_pct: float
+    ram_usage_pct: float
+    load_1: float
+    containers_total: int
+    containers_running: int
+    crash_loop_count: int
+    zfs_pools_count: int
+    zfs_degraded_count: int

@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  control-plane-hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    container_name: control-plane-hub
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ED25519_PUBLIC_KEY=31iGBIN15cAlkXmYXYLwZTXJYR9Yngjzf187Bf+s+xA=
+      - LOG_LEVEL=info
+      # Self-hosted default: embedded SQLite. For cloud, point at Postgres:
+      # - DATABASE_URL=postgresql+asyncpg://hub:hub@postgres:5432/hub
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/hub.db
+      - CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - hub-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: control-plane-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - HUB_URL=http://control-plane-hub:8080
+    depends_on:
+      - control-plane-hub
+
+  # Uncomment for multi-tenant cloud mode.
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     - POSTGRES_USER=hub
+  #     - POSTGRES_PASSWORD=hub
+  #     - POSTGRES_DB=hub
+  #   volumes:
+  #     - pg-data:/var/lib/postgresql/data
+
+volumes:
+  hub-data:
+  # pg-data:

@@ -1,0 +1,22 @@
+# Multi-stage build for ultra-lightweight Edge Agent (< 20MB)
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /build
+COPY go.mod ./
+# If go.sum exists, copy it
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o agent ./cmd/agent
+
+FROM alpine:3.19
+
+# Optional: smartmontools for S.M.A.R.T. disk forensics
+RUN apk add --no-cache ca-certificates smartmontools
+
+WORKDIR /app
+COPY --from=builder /build/agent /app/agent
+
+ENV HUB_URL="ws://hub:8080/api/v1/agent/stream"
+ENV PUSH_INTERVAL_SEC="10"
+
+ENTRYPOINT ["/app/agent"]
