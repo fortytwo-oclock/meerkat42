@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"control-plane/pkg/dockerctl"
 	"control-plane/pkg/proxmox"
 	"control-plane/pkg/telemetry"
 	"control-plane/pkg/tunnel"
@@ -26,7 +27,7 @@ func getEnv(key, defaultVal string) string {
 }
 
 // buildCommandHandler wires the downstream HubCommand actions the agent supports.
-func buildCommandHandler(proxmoxClient *proxmox.Client) tunnel.CommandHandler {
+func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.Client) tunnel.CommandHandler {
 	return func(action string, payload map[string]interface{}) (interface{}, error) {
 		switch action {
 		case "request_config_backup":
@@ -67,6 +68,19 @@ func buildCommandHandler(proxmoxClient *proxmox.Client) tunnel.CommandHandler {
 				return nil, err
 			}
 			return map[string]string{"task_id": upid}, nil
+		case "docker_pull_image":
+			if dockerClient == nil {
+				return nil, fmt.Errorf("Docker update management is not configured on this agent")
+			}
+			image, ok := payload["image"].(string)
+			if !ok {
+				return nil, fmt.Errorf("image is required")
+			}
+			status, err := dockerClient.Pull(image)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]string{"image": image, "status": status}, nil
 		default:
 			return nil, fmt.Errorf("unsupported action %q", action)
 		}
@@ -106,6 +120,10 @@ func main() {
 		log.Printf("[Proxmox] Remote actions disabled: %v", err)
 	}
 	collector := telemetry.NewCollector(proxmoxClient)
+	dockerClient, err := dockerctl.NewFromEnv()
+	if err != nil {
+		log.Printf("[Docker] Update management disabled: %v", err)
+	}
 
 	cfg := tunnel.Config{
 		HubURL:         hubURL,
@@ -113,7 +131,7 @@ func main() {
 		AuthToken:      authToken,
 		ClientGroup:    clientGroup,
 		PushInterval:   time.Duration(intervalSec) * time.Second,
-		CommandHandler: buildCommandHandler(proxmoxClient),
+		CommandHandler: buildCommandHandler(proxmoxClient, dockerClient),
 	}
 
 	client := tunnel.NewClient(cfg, collector)

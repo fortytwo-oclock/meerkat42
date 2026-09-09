@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"control-plane/pkg/dockerctl"
 )
 
 type imageUpdateResult struct {
@@ -189,7 +191,16 @@ func (c *imageUpdateChecker) inspectLocalDigest(client *http.Client, imageID str
 
 func (c *imageUpdateChecker) inspectDistribution(client *http.Client, image string) (string, error) {
 	endpoint := c.dockerURL + "/distribution/" + url.PathEscape(image) + "/json"
-	response, err := client.Get(endpoint)
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	auth, err := dockerctl.RegistryAuthFromEnv(image)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("X-Registry-Auth", auth)
+	response, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}

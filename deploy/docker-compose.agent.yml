@@ -18,6 +18,9 @@ services:
       # - IMAGE_UPDATE_CHECK_ENABLED=true
       # - IMAGE_UPDATE_CHECK_INTERVAL_SEC=21600
       # - IMAGE_UPDATE_REGISTRIES=docker.io,registry-1.docker.io,ghcr.io,quay.io
+      # Optional read-only Docker CLI config for private registry authentication.
+      # Credentials stay agent-local and are sent only to the local Docker Engine.
+      # - DOCKER_CONFIG_FILE=/run/secrets/docker-config.json
       # Infrastructure Vault (Phase 4, enterprise). 32-byte AES-256 key, base64:
       #   openssl rand -base64 32
       # The hub never receives this key; keep it wherever you keep your DR secrets.
@@ -38,6 +41,7 @@ services:
       - /sys:/host/sys:ro
       # Read-only compose/.env locations for encrypted config backups (Vault)
       # - /opt/stacks:/host/compose:ro
+      # - /root/.docker/config.json:/run/secrets/docker-config.json:ro
     # Optional: Give SYS_RAWIO capability only if deep S.M.A.R.T. disk scanning is needed
     cap_add:
       - SYS_RAWIO

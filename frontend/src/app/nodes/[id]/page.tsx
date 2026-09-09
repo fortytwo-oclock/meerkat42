@@ -177,6 +177,25 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
                       : ""}
                   </div>
                 )}
+                {c.update_available && commands !== null && (
+                  <Button
+                    className="mt-2"
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      setCommandMsg(null);
+                      try {
+                        await api.createCommand(id, "docker_pull_image", { image: c.image });
+                        setCommandMsg(`Pull queued for ${c.image}. Running containers will not be restarted.`);
+                        await loadCommands();
+                      } catch (e: any) {
+                        setCommandMsg(e.message);
+                      }
+                    }}
+                  >
+                    Pull image
+                  </Button>
+                )}
               </div>
             ))}
             {(t.containers ?? []).length === 0 && (

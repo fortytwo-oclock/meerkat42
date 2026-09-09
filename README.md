@@ -131,6 +131,11 @@ replicas, so WebSocket session affinity is not required. See
   credentials never leave the edge, every VMID must be agent-allowlisted, guest
   identity is rechecked against live inventory, and shutdown/reboot use Phase 8's
   optional two-owner approval path.
+- **Phase 10 — Update management:** ✅ private-registry digest checks and image
+  pulls use an agent-local Docker config via `X-Registry-Auth`; credentials never
+  enter telemetry or command results. Pulls require an allowlisted registry and
+  an exact image reference already used by a running container. The workflow
+  intentionally stages the image without silently recreating workloads.
 
 ## Verification
 

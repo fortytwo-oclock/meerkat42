@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from hub.config import Settings, get_settings
 from hub.db.session import session_scope
 from hub.repositories import remote as remote_repo
+from hub.remote.policy import CommandPolicyError, validate_command
 from hub.ws.bus import send_command
 
 log = logging.getLogger("hub.remote.dispatcher")
@@ -25,8 +26,13 @@ async def dispatch_once(settings: Settings, sender: Sender = send_command) -> in
                 tenant_id=row.tenant_id, command_id=row.id,
             )
             if delivered:
+                try:
+                    policy, _ = validate_command(row.action, row.payload)
+                    timeout_seconds = policy.timeout_seconds
+                except CommandPolicyError:
+                    timeout_seconds = settings.remote_command_timeout_seconds
                 await remote_repo.mark_dispatched(
-                    session, row, timeout_seconds=settings.remote_command_timeout_seconds
+                    session, row, timeout_seconds=timeout_seconds
                 )
             else:
                 await remote_repo.mark_unavailable(

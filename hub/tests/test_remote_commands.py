@@ -116,3 +116,13 @@ class RemotePolicyTest(unittest.TestCase):
         self.assertEqual(normalized, payload)
         with self.assertRaises(CommandPolicyError):
             validate_command("proxmox_shutdown", {**payload, "force": True})
+
+    def test_docker_pull_is_tag_only_and_long_running(self) -> None:
+        policy, payload = validate_command(
+            "docker_pull_image", {"image": "registry.example/app:v2"}
+        )
+        self.assertFalse(policy.destructive)
+        self.assertEqual(policy.timeout_seconds, 900)
+        self.assertEqual(payload["image"], "registry.example/app:v2")
+        with self.assertRaises(CommandPolicyError):
+            validate_command("docker_pull_image", {"image": "app@sha256:abc"})

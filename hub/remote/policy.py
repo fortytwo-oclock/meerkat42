@@ -13,6 +13,7 @@ class CommandPolicyError(ValueError):
 class CommandPolicy:
     destructive: bool
     validate: Callable[[dict], dict]
+    timeout_seconds: int = 60
 
 
 def _empty(payload: dict) -> dict:
@@ -39,11 +40,27 @@ def _proxmox_guest(payload: dict) -> dict:
     return {"node": node, "guest_type": guest_type, "vmid": vmid}
 
 
+_IMAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/:+-]{0,254}$")
+
+
+def _docker_image(payload: dict) -> dict:
+    if set(payload) != {"image"}:
+        raise CommandPolicyError("Docker pull requires only image")
+    image = payload.get("image")
+    if (
+        not isinstance(image, str) or not _IMAGE.fullmatch(image)
+        or ".." in image or "@" in image
+    ):
+        raise CommandPolicyError("invalid or digest-pinned image reference")
+    return {"image": image}
+
+
 POLICIES: dict[str, CommandPolicy] = {
     "ping": CommandPolicy(destructive=False, validate=_empty),
-    "proxmox_start": CommandPolicy(destructive=False, validate=_proxmox_guest),
-    "proxmox_shutdown": CommandPolicy(destructive=True, validate=_proxmox_guest),
-    "proxmox_reboot": CommandPolicy(destructive=True, validate=_proxmox_guest),
+    "proxmox_start": CommandPolicy(destructive=False, validate=_proxmox_guest, timeout_seconds=120),
+    "proxmox_shutdown": CommandPolicy(destructive=True, validate=_proxmox_guest, timeout_seconds=120),
+    "proxmox_reboot": CommandPolicy(destructive=True, validate=_proxmox_guest, timeout_seconds=120),
+    "docker_pull_image": CommandPolicy(destructive=False, validate=_docker_image, timeout_seconds=900),
 }
 
 
