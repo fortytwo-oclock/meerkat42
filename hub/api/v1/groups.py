@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_license_manager, get_tenant_id
+from hub.deps import get_license_manager, get_tenant_id, require_admin
 from hub.license_manager import LicenseManager
 from hub.repositories import groups as groups_repo
 from hub.repositories import nodes as nodes_repo
@@ -42,6 +42,7 @@ async def create_group(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     lm: LicenseManager = Depends(get_license_manager),
+    _: str = Depends(require_admin),
 ) -> dict:
     if not lm.has_feature("multi_tenancy") and lm.claims.get("tier") == "community":
         raise HTTPException(
@@ -63,6 +64,7 @@ async def delete_group(
     slug: str,
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
+    _: str = Depends(require_admin),
 ) -> dict:
     group = await groups_repo.get_by_slug(session, tenant_id, slug)
     if not group:

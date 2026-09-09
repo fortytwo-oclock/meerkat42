@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     # --- Licensing -------------------------------------------------------
     ed25519_public_key: str = "31iGBIN15cAlkXmYXYLwZTXJYR9Yngjzf187Bf+s+xA="
 
+    # --- Auth -----------------------------------------------------------
+    # Shared secret an edge agent must present (X-Auth-Token) to stream telemetry.
+    # Empty = accept any agent (dev only; set this in every real deployment).
+    agent_bootstrap_token: str = ""
+    # Bearer/X-Admin-Token required for mutating REST endpoints (license, groups,
+    # alert rules). Empty = open (single-operator self-hosted default).
+    admin_token: str = ""
+
     # --- Liveness / watchdog -------------------------------------------
     node_stale_seconds: float = 25.0
     node_offline_seconds: float = 30.0

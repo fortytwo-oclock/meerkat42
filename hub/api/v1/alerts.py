@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_license_manager, get_tenant_id
+from hub.deps import get_license_manager, get_tenant_id, require_admin
 from hub.license_manager import LicenseManager
-from hub.models.alert import AlertMetric, Comparator, Severity
+from hub.models.alert import AlertMetric, AlertState, Comparator, Severity
 from hub.repositories import alerts as alerts_repo
 from hub.repositories import groups as groups_repo
-from hub.schemas import AckRequest, AlertRuleCreate
+from hub.schemas import AlertRuleCreate
 
 router = APIRouter()
 
@@ -44,12 +46,17 @@ async def active_alerts(
 @router.post("/alerts/{event_id}/ack")
 async def ack_alert(
     event_id: str,
-    req: AckRequest,
     session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+    principal: str = Depends(require_admin),
 ) -> dict:
-    event = await alerts_repo.acknowledge(session, event_id, req.acknowledged_by)
+    event = await alerts_repo.get_event_for_tenant(session, tenant_id, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail="Alert not found")
+    if event.state != AlertState.RESOLVED:
+        event.state = AlertState.ACKNOWLEDGED
+        event.acknowledged_at = datetime.now(timezone.utc)
+        event.acknowledged_by = principal  # authenticated principal, never client-supplied
     await session.commit()
     return {"id": event.id, "state": event.state.value}
 
@@ -84,6 +91,7 @@ async def create_rule(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     lm: LicenseManager = Depends(get_license_manager),
+    _: str = Depends(require_admin),
 ) -> dict:
     if lm.claims.get("tier") == "community" and not lm.has_feature("basic_alerts"):
         raise HTTPException(status_code=402, detail="Alerting not available in this tier")
@@ -115,8 +123,10 @@ async def create_rule(
 async def delete_rule(
     rule_id: str,
     session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+    _: str = Depends(require_admin),
 ) -> dict:
-    rule = await alerts_repo.get_rule(session, rule_id)
+    rule = await alerts_repo.get_rule_for_tenant(session, tenant_id, rule_id)
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
     if rule.is_builtin:

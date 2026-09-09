@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_license_manager, get_tenant_id
+from hub.deps import get_license_manager, get_tenant_id, require_admin
 from hub.license_manager import LicenseError, LicenseManager
 from hub.repositories import licenses as lic_repo
 from hub.repositories import nodes as nodes_repo
@@ -39,6 +39,7 @@ async def apply_license(
     session: AsyncSession = Depends(get_session),
     lm: LicenseManager = Depends(get_license_manager),
     tenant_id: str = Depends(get_tenant_id),
+    _: str = Depends(require_admin),
 ) -> dict:
     try:
         claims = lm.apply(req.license_token)

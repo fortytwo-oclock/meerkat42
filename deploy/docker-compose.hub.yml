@@ -12,6 +12,11 @@ services:
     environment:
       - ED25519_PUBLIC_KEY=31iGBIN15cAlkXmYXYLwZTXJYR9Yngjzf187Bf+s+xA=
       - LOG_LEVEL=info
+      # Shared secret every edge agent must present (must match the agent's AUTH_TOKEN).
+      - AGENT_BOOTSTRAP_TOKEN=agent_secret_token_change_me
+      # Required for mutating REST endpoints (license/groups/alert-rules/ack).
+      # Leave unset only for a trusted single-operator LAN deployment.
+      - ADMIN_TOKEN=admin_token_change_me
       # Self-hosted default: embedded SQLite. For cloud, point at Postgres:
       # - DATABASE_URL=postgresql+asyncpg://hub:hub@postgres:5432/hub
       - DATABASE_URL=sqlite+aiosqlite:////app/data/hub.db
@@ -34,6 +39,8 @@ services:
       - "3000:3000"
     environment:
       - HUB_URL=http://control-plane-hub:8080
+      # If the hub sets ADMIN_TOKEN, operators paste it into the dashboard
+      # (stored client-side); it is not baked into the image.
     depends_on:
       - control-plane-hub
 

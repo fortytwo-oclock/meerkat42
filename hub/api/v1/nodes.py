@@ -54,7 +54,7 @@ async def get_node(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
-    node = await nodes_repo.get(session, node_id)
+    node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
     if not node:
         raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
     groups = {g.id: g for g in await groups_repo.list_groups(session, tenant_id)}
@@ -83,8 +83,9 @@ async def node_metrics(
     range_hours: int = Query(default=6, ge=1, le=24 * 30),
     session: AsyncSession = Depends(get_session),
     store: MetricStore = Depends(get_metric_store),
+    tenant_id: str = Depends(get_tenant_id),
 ) -> dict:
-    node = await nodes_repo.get(session, node_id)
+    node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
     end = datetime.now(timezone.utc)

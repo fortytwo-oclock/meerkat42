@@ -26,10 +26,6 @@ class AlertRuleCreate(BaseModel):
     enabled: bool = True
 
 
-class AckRequest(BaseModel):
-    acknowledged_by: str = "operator"
-
-
 class NodeSummary(BaseModel):
     node_id: str
     hostname: str

@@ -43,6 +43,21 @@ Swap the whole store (VictoriaMetrics / Timescale) by implementing `MetricStore`
 and assigning `app.state.metric_store` in `main.py` — ingestion and the API are
 storage-agnostic.
 
+## Auth
+
+Phase-1 baseline (full RBAC / client portals are Phase 4):
+
+- `AGENT_BOOTSTRAP_TOKEN` — shared secret the edge agent sends as `X-Auth-Token`;
+  the WS ingest handler rejects mismatches with close code `4401`. The node
+  identity is taken from the handshake and **pinned** — later frames cannot
+  reassign it (`node_id` on a telemetry frame that disagrees is ignored).
+- `ADMIN_TOKEN` — when set, mutating REST endpoints (`POST /license`,
+  `POST/DELETE /groups`, `POST/DELETE /alert-rules`, `POST /alerts/{id}/ack`)
+  require `Authorization: Bearer <token>` or `X-Admin-Token`. Unset = open
+  single-operator mode. `acknowledged_by` is always the authenticated principal,
+  never client-supplied.
+- All node-addressed reads are tenant-scoped (cross-tenant IDs return 404).
+
 ## Run locally
 
 ```bash

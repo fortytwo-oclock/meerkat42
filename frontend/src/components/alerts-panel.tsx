@@ -47,7 +47,7 @@ export function AlertsPanel({
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  await api.ackAlert(a.id, "operator");
+                  await api.ackAlert(a.id);
                   onChange();
                 }}
               >

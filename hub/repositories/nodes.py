@@ -17,6 +17,18 @@ async def get(session: AsyncSession, node_id: str) -> Node | None:
     return await session.get(Node, node_id)
 
 
+async def get_for_tenant(
+    session: AsyncSession, tenant_id: str, node_id: str
+) -> Node | None:
+    """Tenant-scoped lookup — prevents cross-tenant IDOR on node-addressed routes."""
+    rows = await session.execute(
+        select(Node)
+        .join(ClientGroup, Node.group_id == ClientGroup.id)
+        .where(Node.node_id == node_id, ClientGroup.tenant_id == tenant_id)
+    )
+    return rows.scalar_one_or_none()
+
+
 async def list_for_tenant(
     session: AsyncSession, tenant_id: str, group_slug: str | None = None
 ) -> list[Node]:

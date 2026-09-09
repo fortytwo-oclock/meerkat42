@@ -58,10 +58,33 @@ export interface MetricSeries {
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
+/** Optional operator token for mutating endpoints when the hub sets ADMIN_TOKEN. */
+export function setAdminToken(token: string) {
+  try {
+    if (token) localStorage.setItem("hub_admin_token", token);
+    else localStorage.removeItem("hub_admin_token");
+  } catch {
+    /* ignore */
+  }
+}
+
+function adminHeader(): Record<string, string> {
+  try {
+    const t = localStorage.getItem("hub_admin_token");
+    return t ? { "X-Admin-Token": t } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...adminHeader(),
+      ...(init?.headers ?? {}),
+    },
     cache: "no-store",
   });
   if (!res.ok) {
@@ -85,11 +108,8 @@ export const api = {
     j<{ alerts: AlertEvent[]; total: number }>(
       `/api/v1/alerts${group ? `?client_group=${encodeURIComponent(group)}` : ""}`,
     ),
-  ackAlert: (id: string, by: string) =>
-    j(`/api/v1/alerts/${id}/ack`, {
-      method: "POST",
-      body: JSON.stringify({ acknowledged_by: by }),
-    }),
+  ackAlert: (id: string) =>
+    j(`/api/v1/alerts/${id}/ack`, { method: "POST" }),
   license: () => j<LicenseInfo>(`/api/v1/license`),
   applyLicense: (license_token: string) =>
     j<{ success: boolean; claims: Record<string, unknown> }>(`/api/v1/license`, {

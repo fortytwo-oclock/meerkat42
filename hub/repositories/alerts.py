@@ -27,6 +27,32 @@ async def get_rule(session: AsyncSession, rule_id: str) -> AlertRule | None:
     return await session.get(AlertRule, rule_id)
 
 
+async def get_rule_for_tenant(
+    session: AsyncSession, tenant_id: str, rule_id: str
+) -> AlertRule | None:
+    rows = await session.execute(
+        select(AlertRule)
+        .outerjoin(ClientGroup, AlertRule.group_id == ClientGroup.id)
+        .where(
+            AlertRule.id == rule_id,
+            (AlertRule.group_id.is_(None)) | (ClientGroup.tenant_id == tenant_id),
+        )
+    )
+    return rows.scalar_one_or_none()
+
+
+async def get_event_for_tenant(
+    session: AsyncSession, tenant_id: str, event_id: str
+) -> AlertEvent | None:
+    rows = await session.execute(
+        select(AlertEvent)
+        .join(Node, AlertEvent.node_id == Node.node_id)
+        .join(ClientGroup, Node.group_id == ClientGroup.id)
+        .where(AlertEvent.id == event_id, ClientGroup.tenant_id == tenant_id)
+    )
+    return rows.scalar_one_or_none()
+
+
 async def create_rule(session: AsyncSession, **fields) -> AlertRule:
     rule = AlertRule(**fields)
     session.add(rule)
