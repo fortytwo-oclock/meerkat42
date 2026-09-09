@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"control-plane/pkg/diagnostics"
 	"control-plane/pkg/dockerctl"
 	"control-plane/pkg/proxmox"
 	"control-plane/pkg/telemetry"
@@ -81,6 +82,19 @@ func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.
 				return nil, err
 			}
 			return map[string]string{"image": image, "status": status}, nil
+		case "diagnostic_run":
+			if len(payload) != 1 {
+				return nil, fmt.Errorf("diagnostic payload has unexpected fields")
+			}
+			name, ok := payload["diagnostic"].(string)
+			if !ok {
+				return nil, fmt.Errorf("diagnostic is required")
+			}
+			output, err := diagnostics.Run(name)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]string{"diagnostic": name, "output": output}, nil
 		default:
 			return nil, fmt.Errorf("unsupported action %q", action)
 		}

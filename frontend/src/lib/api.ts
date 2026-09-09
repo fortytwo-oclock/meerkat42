@@ -291,6 +291,18 @@ export const api = {
     j<RemoteCommand>(`/api/v1/commands/${id}/cancel`, { method: "POST" }),
   approveCommand: (id: string) =>
     j<RemoteCommand>(`/api/v1/commands/${id}/approve`, { method: "POST" }),
+  emergencyStatus: () => j<{ enabled: boolean }>(`/api/v1/emergency/status`),
+  createEmergencySession: (totp: string) =>
+    j<{ grant: string; expires_at: string }>(`/api/v1/emergency/sessions`, {
+      method: "POST",
+      headers: { "X-TOTP-Code": totp },
+    }),
+  runDiagnostic: (nodeId: string, diagnostic: string, grant: string) =>
+    j<RemoteCommand>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/diagnostics`, {
+      method: "POST",
+      headers: { "X-Emergency-Grant": grant },
+      body: JSON.stringify({ diagnostic }),
+    }),
 
   billingSubscription: () =>
     j<BillingSubscription>(`/api/v1/billing/subscription`),

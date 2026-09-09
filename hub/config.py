@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     remote_command_max_result_bytes: int = 64 * 1024
     remote_command_two_person_approval: bool = False
 
+    # --- Break-glass diagnostics (Phase 12) -------------------------
+    emergency_console_enabled: bool = False
+    emergency_totp_secret: str = ""
+    emergency_session_ttl_seconds: int = 300
+
     # --- Stripe billing / automated licenses (Phase 5) --------------
     stripe_webhook_secret: str = ""
     stripe_secret_key: str = ""

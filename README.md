@@ -140,6 +140,12 @@ replicas, so WebSocket session affinity is not required. See
   readiness probes, owner-gated Prometheus metrics, atomic SQLite/PostgreSQL
   backup tooling with SHA-256 manifests, isolated restore verification in CI,
   and an RPO/RTO-based disaster-recovery runbook and drill schedule.
+- **Phase 12 — Emergency diagnostics:** ✅ disabled-by-default break-glass
+  console over the outbound agent tunnel. Owner authentication plus a TOTP
+  creates a hashed, actor-bound grant lasting at most 15 minutes. Only six fixed
+  read-only diagnostics are available; there is no arbitrary shell, arguments,
+  or stdin. Execution is capped at 15 seconds and 48 KiB, results are owner-only,
+  and session/command activity is audited.
 
 ## Verification
 

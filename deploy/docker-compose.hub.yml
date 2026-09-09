@@ -34,6 +34,9 @@ services:
       # - BILLING_SMTP_HOST=smtp.example.com
       # - BILLING_SMTP_USERNAME=...
       # - BILLING_SMTP_PASSWORD=...
+      # Break-glass diagnostics: owner + TOTP, fixed read-only commands only.
+      # - EMERGENCY_CONSOLE_ENABLED=true
+      # - EMERGENCY_TOTP_SECRET=<base32 secret from your authenticator manager>
     volumes:
       - hub-data:/app/data
     healthcheck:

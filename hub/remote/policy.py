@@ -14,6 +14,7 @@ class CommandPolicy:
     destructive: bool
     validate: Callable[[dict], dict]
     timeout_seconds: int = 60
+    emergency: bool = False
 
 
 def _empty(payload: dict) -> dict:
@@ -55,12 +56,27 @@ def _docker_image(payload: dict) -> dict:
     return {"image": image}
 
 
+_DIAGNOSTICS = {
+    "uptime", "disk_usage", "memory", "network",
+    "failed_services", "recent_errors",
+}
+
+
+def _diagnostic(payload: dict) -> dict:
+    if set(payload) != {"diagnostic"} or payload.get("diagnostic") not in _DIAGNOSTICS:
+        raise CommandPolicyError("diagnostic is not allowlisted")
+    return {"diagnostic": payload["diagnostic"]}
+
+
 POLICIES: dict[str, CommandPolicy] = {
     "ping": CommandPolicy(destructive=False, validate=_empty),
     "proxmox_start": CommandPolicy(destructive=False, validate=_proxmox_guest, timeout_seconds=120),
     "proxmox_shutdown": CommandPolicy(destructive=True, validate=_proxmox_guest, timeout_seconds=120),
     "proxmox_reboot": CommandPolicy(destructive=True, validate=_proxmox_guest, timeout_seconds=120),
     "docker_pull_image": CommandPolicy(destructive=False, validate=_docker_image, timeout_seconds=900),
+    "diagnostic_run": CommandPolicy(
+        destructive=False, validate=_diagnostic, timeout_seconds=30, emergency=True
+    ),
 }
 
 

@@ -126,3 +126,12 @@ class RemotePolicyTest(unittest.TestCase):
         self.assertEqual(payload["image"], "registry.example/app:v2")
         with self.assertRaises(CommandPolicyError):
             validate_command("docker_pull_image", {"image": "app@sha256:abc"})
+
+    def test_diagnostics_are_fixed_and_emergency_only(self) -> None:
+        policy, payload = validate_command(
+            "diagnostic_run", {"diagnostic": "failed_services"}
+        )
+        self.assertTrue(policy.emergency)
+        self.assertEqual(payload, {"diagnostic": "failed_services"})
+        with self.assertRaises(CommandPolicyError):
+            validate_command("diagnostic_run", {"diagnostic": "shell"})

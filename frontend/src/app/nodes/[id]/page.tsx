@@ -15,6 +15,16 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { api, type BackupMeta, type MetricSeries, type RemoteCommand } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+const DIAGNOSTICS = [
+  ["uptime", "Uptime"],
+  ["disk_usage", "Disk usage"],
+  ["memory", "Memory"],
+  ["network", "Network"],
+  ["failed_services", "Failed services"],
+  ["recent_errors", "Recent errors"],
+] as const;
 
 export default function NodeDetailPage({ params }: { params: { id: string } }) {
   const id = decodeURIComponent(params.id);
@@ -26,6 +36,9 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   const [vaultMsg, setVaultMsg] = useState<string | null>(null);
   const [commands, setCommands] = useState<RemoteCommand[] | null>(null);
   const [commandMsg, setCommandMsg] = useState<string | null>(null);
+  const [emergencyEnabled, setEmergencyEnabled] = useState(false);
+  const [totp, setTotp] = useState("");
+  const [emergencyGrant, setEmergencyGrant] = useState<string | null>(null);
 
   const loadBackups = async () => {
     try {
@@ -38,6 +51,11 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     loadBackups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  useEffect(() => {
+    api.emergencyStatus()
+      .then((status) => setEmergencyEnabled(status.enabled))
+      .catch(() => setEmergencyEnabled(false));
   }, [id]);
 
   const loadCommands = async () => {
@@ -356,6 +374,75 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
               ))}
               <p className="text-xs text-muted-foreground">
                 Commands are tenant-scoped, policy checked, idempotent, and fully audited.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {emergencyEnabled && commands !== null && (
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Break-glass diagnostics</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {!emergencyGrant ? (
+                <div className="flex max-w-sm gap-2">
+                  <Input
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="6-digit TOTP"
+                    value={totp}
+                    onChange={(event) => setTotp(event.target.value.replace(/\D/g, ""))}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const session = await api.createEmergencySession(totp);
+                        setEmergencyGrant(session.grant);
+                        setTotp("");
+                        setCommandMsg(`Emergency access unlocked until ${new Date(session.expires_at).toLocaleTimeString()}.`);
+                      } catch (e: any) {
+                        setCommandMsg(e.message);
+                      }
+                    }}
+                  >
+                    Unlock
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {DIAGNOSTICS.map(([value, label]) => (
+                    <Button
+                      key={value}
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await api.runDiagnostic(id, value, emergencyGrant);
+                          setCommandMsg(`${label} diagnostic queued.`);
+                          await loadCommands();
+                        } catch (e: any) {
+                          setCommandMsg(e.message);
+                          if (String(e.message).includes("grant")) setEmergencyGrant(null);
+                        }
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {commands
+                .filter((command) => command.action === "diagnostic_run" && command.status === "SUCCEEDED")
+                .slice(0, 1)
+                .map((command) => (
+                  <pre key={command.id} className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+                    {String(command.result?.output ?? "No output")}
+                  </pre>
+                ))}
+              <p className="text-xs text-muted-foreground">
+                Owner-only, TOTP-gated, short-lived access. Commands are fixed and read-only; output and access are audited.
               </p>
             </CardContent>
           </Card>

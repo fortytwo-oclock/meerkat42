@@ -62,3 +62,20 @@ class AgentEnrollmentToken(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
+
+
+class EmergencyAccessGrant(Base):
+    """Short-lived break-glass credential; only its SHA-256 digest is stored."""
+
+    __tablename__ = "emergency_access_grants"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = created_at_col()
+    expires_at: Mapped[datetime] = mapped_column(TZDateTime, index=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)

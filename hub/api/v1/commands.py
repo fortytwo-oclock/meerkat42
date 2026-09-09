@@ -10,6 +10,7 @@ from hub.deps import Principal, get_tenant_id, require_admin, require_owner
 from hub.repositories import nodes as nodes_repo
 from hub.repositories import remote as remote_repo
 from hub.remote.policy import CommandPolicyError, validate_command
+from hub.models import Role
 
 router = APIRouter()
 
@@ -59,6 +60,8 @@ async def create_command(
     except CommandPolicyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     approval_required = policy.destructive and settings.remote_command_two_person_approval
+    if policy.emergency:
+        raise HTTPException(status_code=403, detail="emergency actions require a break-glass grant")
     row = await remote_repo.create(
         session, tenant_id=tenant_id, node_id=node_id, action=request.action,
         payload=normalized_payload, requested_by=principal.label,
@@ -74,21 +77,25 @@ async def list_commands(
     node_id: str, limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
-    _: Principal = Depends(require_admin),
+    principal: Principal = Depends(require_admin),
 ) -> dict:
     if await nodes_repo.get_for_tenant(session, tenant_id, node_id) is None:
         raise HTTPException(status_code=404, detail="Node not found")
     rows = await remote_repo.list_for_node(session, tenant_id, node_id, limit=limit)
+    if principal.role != Role.OWNER:
+        rows = [row for row in rows if row.action != "diagnostic_run"]
     return {"commands": [public(row) for row in rows]}
 
 
 @router.get("/commands/{command_id}")
 async def get_command(
     command_id: str, session: AsyncSession = Depends(get_session),
-    tenant_id: str = Depends(get_tenant_id), _: Principal = Depends(require_admin),
+    tenant_id: str = Depends(get_tenant_id), principal: Principal = Depends(require_admin),
 ) -> dict:
     row = await remote_repo.get_for_tenant(session, tenant_id, command_id)
     if row is None:
+        raise HTTPException(status_code=404, detail="Command not found")
+    if row.action == "diagnostic_run" and principal.role != Role.OWNER:
         raise HTTPException(status_code=404, detail="Command not found")
     return public(row)
 
