@@ -1,0 +1,14 @@
+.git
+.github
+.tools
+.venv
+data
+**/__pycache__
+**/*.pyc
+**/*.db
+**/*.db-wal
+**/*.db-shm
+frontend/node_modules
+frontend/.next
+.env
+.env.*

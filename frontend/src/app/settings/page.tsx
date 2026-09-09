@@ -12,7 +12,10 @@ import {
   api,
   type AlertRule,
   type ApiTokenInfo,
+  type BillingPlan,
+  type BillingSubscription,
   type Channel,
+  type IssuedBillingLicense,
 } from "@/lib/api";
 
 const KIND_HINT: Record<string, string> = {
@@ -27,6 +30,10 @@ export default function SettingsPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [tokens, setTokens] = useState<ApiTokenInfo[] | null>(null);
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [billing, setBilling] = useState<BillingSubscription | null>(null);
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
+  const [checkoutEmail, setCheckoutEmail] = useState("");
+  const [issuedLicense, setIssuedLicense] = useState<IssuedBillingLicense | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [token, setToken] = useState("");
 
@@ -49,6 +56,16 @@ export default function SettingsPage() {
       setTokens((await api.tokens()).tokens);
     } catch {
       setTokens(null); // not owner / not configured
+    }
+    try {
+      setBilling(await api.billingSubscription());
+    } catch {
+      setBilling(null); // no subscription / not an authenticated owner
+    }
+    try {
+      setBillingPlans((await api.billingPlans()).plans);
+    } catch {
+      setBillingPlans([]);
     }
   }, []);
 
@@ -95,6 +112,139 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {(billing || billingPlans.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Billing &amp; offline license</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {billing ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary">{billing.status}</Badge>
+                  <span>{billing.stripe_product_id}</span>
+                  {billing.cancel_at_period_end && (
+                    <Badge variant="warning">cancels at period end</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Subscription {billing.stripe_subscription_id}
+                  {billing.current_period_end
+                    ? ` · current period ends ${new Date(billing.current_period_end).toLocaleString()}`
+                    : ""}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        setIssuedLicense(await api.billingLicense());
+                        setErr(null);
+                      } catch (e: any) {
+                        setErr(e.message);
+                      }
+                    }}
+                  >
+                    Retrieve issued license
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        window.location.assign((await api.createBillingPortal()).url);
+                      } catch (e: any) {
+                        setErr(e.message);
+                      }
+                    }}
+                  >
+                    Manage billing
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <Input
+                  type="email"
+                  placeholder="Billing email"
+                  value={checkoutEmail}
+                  onChange={(e) => setCheckoutEmail(e.target.value)}
+                />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {billingPlans.map((plan) => (
+                    <div key={plan.product_id} className="rounded-md border p-3">
+                      <div className="font-medium">{plan.tier}</div>
+                      <p className="mb-2 text-xs text-muted-foreground">
+                        {plan.max_nodes === -1 ? "Unlimited" : plan.max_nodes} nodes
+                      </p>
+                      <Button
+                        size="sm"
+                        disabled={!checkoutEmail.trim()}
+                        onClick={async () => {
+                          try {
+                            const result = await api.createCheckout(
+                              plan.product_id,
+                              checkoutEmail.trim(),
+                            );
+                            window.location.assign(result.url);
+                          } catch (e: any) {
+                            setErr(e.message);
+                          }
+                        }}
+                      >
+                        Subscribe
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {issuedLicense && (
+              <div className="space-y-2 rounded-md border border-emerald-600/40 bg-emerald-600/10 p-3">
+                <p className="text-xs font-medium">
+                  Issued {new Date(issuedLicense.issued_at).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Email delivery: {issuedLicense.delivery_status.toLowerCase()}
+                  {issuedLicense.delivery_email ? ` to ${issuedLicense.delivery_email}` : ""}
+                  {issuedLicense.delivered_at
+                    ? ` · ${new Date(issuedLicense.delivered_at).toLocaleString()}`
+                    : ""}
+                </p>
+                <code className="block max-h-24 overflow-auto break-all text-xs">
+                  {issuedLicense.license_token}
+                </code>
+                <Button
+                  size="sm"
+                  onClick={() => navigator.clipboard.writeText(issuedLicense.license_token)}
+                >
+                  Copy license token
+                </Button>
+                {(issuedLicense.delivery_status === "FAILED" ||
+                  issuedLicense.delivery_status === "RETRY") && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        await api.retryBillingLicenseDelivery();
+                        setIssuedLicense(await api.billingLicense());
+                        setErr(null);
+                      } catch (e: any) {
+                        setErr(e.message);
+                      }
+                    }}
+                  >
+                    Retry email delivery
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -19,14 +19,14 @@ type NodeTelemetry struct {
 
 // HostMetrics captures CPU, RAM, and load averages.
 type HostMetrics struct {
-	Load1        float64 `json:"load_1"`
-	Load5        float64 `json:"load_5"`
-	Load15       float64 `json:"load_15"`
-	CPUUsagePct  float64 `json:"cpu_usage_pct"`
-	TotalRAMMB   uint64  `json:"total_ram_mb"`
-	AvailRAMMB   uint64  `json:"avail_ram_mb"`
-	UsedRAMMB    uint64  `json:"used_ram_mb"`
-	RAMUsagePct  float64 `json:"ram_usage_pct"`
+	Load1       float64 `json:"load_1"`
+	Load5       float64 `json:"load_5"`
+	Load15      float64 `json:"load_15"`
+	CPUUsagePct float64 `json:"cpu_usage_pct"`
+	TotalRAMMB  uint64  `json:"total_ram_mb"`
+	AvailRAMMB  uint64  `json:"avail_ram_mb"`
+	UsedRAMMB   uint64  `json:"used_ram_mb"`
+	RAMUsagePct float64 `json:"ram_usage_pct"`
 }
 
 // ZFSPoolHealth contains pool capacity, state, and error counters.
@@ -47,8 +47,8 @@ type ContainerSummary struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	Image        string    `json:"image"`
-	State        string    `json:"state"`        // running, exited, restarting
-	Status       string    `json:"status"`       // e.g. "Up 4 days", "Restarting (1) 20 secs ago"
+	State        string    `json:"state"`  // running, exited, restarting
+	Status       string    `json:"status"` // e.g. "Up 4 days", "Restarting (1) 20 secs ago"
 	RestartCount int       `json:"restart_count"`
 	IsCrashLoop  bool      `json:"is_crash_loop"`
 	Created      time.Time `json:"created"`
@@ -56,13 +56,13 @@ type ContainerSummary struct {
 
 // DiskSMART represents storage drive forensic summary.
 type DiskSMART struct {
-	DeviceName  string  `json:"device_name"`  // e.g. /dev/sda, nvme0n1
-	Model       string  `json:"model"`
-	Serial      string  `json:"serial"`
-	Temperature int     `json:"temperature_c"`
-	Health      string  `json:"health"`       // PASSED, FAILING, UNKNOWN
-	PowerOnHrs  uint64  `json:"power_on_hours"`
-	Reallocated uint64  `json:"reallocated_sectors"`
+	DeviceName  string `json:"device_name"` // e.g. /dev/sda, nvme0n1
+	Model       string `json:"model"`
+	Serial      string `json:"serial"`
+	Temperature int    `json:"temperature_c"`
+	Health      string `json:"health"` // PASSED, FAILING, UNKNOWN
+	PowerOnHrs  uint64 `json:"power_on_hours"`
+	Reallocated uint64 `json:"reallocated_sectors"`
 }
 
 // AuthHandshake is sent by the edge agent upon establishing the outbound WebSocket.

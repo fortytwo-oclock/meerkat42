@@ -21,7 +21,10 @@ target_metadata = Base.metadata
 
 
 def _sync_url() -> str:
-    url = config.get_main_option("sqlalchemy.url") or get_settings().database_url
+    # Settings owns runtime configuration, including DATABASE_URL. Reading the
+    # always-present alembic.ini value first made CLI migrations silently ignore
+    # environment overrides and potentially target the wrong database.
+    url = get_settings().database_url
     return (
         url.replace("+aiosqlite", "")
         .replace("+asyncpg", "+psycopg2" if "postgresql" in url else "")

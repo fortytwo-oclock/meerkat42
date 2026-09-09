@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from hub import __version__
 from hub.api.v1 import api_router
+from hub.billing.delivery import delivery_loop
 from hub.config import get_settings
 from hub.db.base import Base
 from hub.db.session import engine, session_scope
@@ -25,6 +26,7 @@ from hub.services.alerting import BUILTIN_RULES
 from hub.services.liveness import rollup_loop, watchdog_loop
 from hub.timeseries import SqlMetricStore
 from hub.ws.ingest import router as ingest_router
+from hub.ws.bus import bus
 from hub.ws.ui import router as ui_router
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
@@ -34,18 +36,19 @@ settings = get_settings()
 
 async def _init_schema() -> None:
     """Alembic in production; create_all is the zero-config fallback for fresh SQLite."""
-    if settings.auto_migrate:
-        try:
-            from alembic import command
-            from alembic.config import Config
+    if not settings.auto_migrate:
+        return
+    try:
+        from alembic import command
+        from alembic.config import Config
 
-            cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-            cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "migrations"))
-            cfg.set_main_option("sqlalchemy.url", settings.database_url)
-            await asyncio.to_thread(command.upgrade, cfg, "head")
-            return
-        except Exception:  # pragma: no cover
-            log.warning("alembic upgrade failed; falling back to create_all", exc_info=True)
+        cfg = Config(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+        cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "migrations"))
+        cfg.set_main_option("sqlalchemy.url", settings.database_url)
+        await asyncio.to_thread(command.upgrade, cfg, "head")
+        return
+    except Exception:  # pragma: no cover
+        log.warning("alembic upgrade failed; falling back to create_all", exc_info=True)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -82,19 +85,29 @@ async def lifespan(app: FastAPI):
     app.state.metric_store = SqlMetricStore()
     await _init_schema()
     await _seed(app)
+    await bus.start(
+        settings.redis_url,
+        prefix=settings.redis_prefix,
+        lease_seconds=settings.agent_lease_seconds,
+        refresh_seconds=settings.agent_lease_refresh_seconds,
+    )
 
     stop = asyncio.Event()
-    tasks = [
-        asyncio.create_task(watchdog_loop(stop)),
-        asyncio.create_task(rollup_loop(app.state.metric_store, stop)),
-        asyncio.create_task(dispatch_loop(stop)),
-    ]
+    tasks = []
+    if settings.background_workers_enabled:
+        tasks = [
+            asyncio.create_task(watchdog_loop(stop)),
+            asyncio.create_task(rollup_loop(app.state.metric_store, stop)),
+            asyncio.create_task(dispatch_loop(stop)),
+            asyncio.create_task(delivery_loop(stop)),
+        ]
     log.info("hub %s ready (db=%s)", __version__, "sqlite" if settings.is_sqlite else "postgres")
     try:
         yield
     finally:
         stop.set()
         await asyncio.gather(*tasks, return_exceptions=True)
+        await bus.stop()
 
 
 def create_app() -> FastAPI:

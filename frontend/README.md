@@ -21,6 +21,9 @@ npm run dev               # http://localhost:3000
   modal (paste signed Ed25519 JWT, node-usage bar, expiry).
 - **`/nodes/[id]`** — Node detail: CPU/RAM history chart (6h/24h/7d/30d, backed by
   the hub's rollups), Docker container cards, ZFS pool cards, SMART disk table.
+- **`/settings`** — alert rules, notification channels, API/client-portal tokens,
+  and owner-only Stripe Checkout/Billing Portal controls, subscription status,
+  and issued offline-license retrieval.
 
 ## Structure
 

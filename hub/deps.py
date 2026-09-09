@@ -25,11 +25,6 @@ def get_metric_store(request: Request) -> MetricStore:
     return request.app.state.metric_store
 
 
-def get_tenant_id(request: Request) -> str:
-    """Self-hosted: always the default tenant. Cloud: resolve from subdomain/host here."""
-    return request.app.state.default_tenant_id
-
-
 @dataclass(frozen=True)
 class Principal:
     role: Role
@@ -105,6 +100,13 @@ async def authenticate(
     raise HTTPException(status_code=401, detail="authentication required")
 
 
+async def get_tenant_id(
+    principal: Principal = Depends(authenticate),
+) -> str:
+    """Resolve tenant scope from the authenticated principal."""
+    return principal.tenant_id
+
+
 def require_role(minimum: Role):
     async def _dep(principal: Principal = Depends(authenticate)) -> Principal:
         if not principal.can(minimum):
@@ -120,6 +122,22 @@ def require_role(minimum: Role):
 # `.label` is used as the audit actor); anything below admin gets 403.
 require_admin = require_role(Role.ADMIN)
 require_owner = require_role(Role.OWNER)
+
+
+async def require_configured_owner(
+    principal: Principal = Depends(require_owner),
+) -> Principal:
+    """Owner access that refuses anonymous single-operator mode.
+
+    Billing credentials and generated license tokens must never become public
+    merely because a self-hosted instance has not configured authentication.
+    """
+    if principal.label == "anonymous":
+        raise HTTPException(
+            status_code=403,
+            detail="this endpoint requires configured owner authentication",
+        )
+    return principal
 
 
 async def viewer_scope(

@@ -25,6 +25,15 @@ services:
       # - DATABASE_URL=postgresql+asyncpg://hub:hub@postgres:5432/hub
       - DATABASE_URL=sqlite+aiosqlite:////app/data/hub.db
       - CORS_ORIGINS=http://localhost:3000
+      # Hosted billing service only (never ship the private key to customer hubs):
+      # - STRIPE_WEBHOOK_SECRET=whsec_...
+      # - LICENSE_SIGNING_PRIVATE_KEY=<base64 raw 32-byte Ed25519 private key>
+      # - STRIPE_PRODUCT_PLANS_JSON={"prod_enterprise":{"tier":"enterprise","max_nodes":100,"features":["*"]}}
+      # - BILLING_EMAIL_ENABLED=true
+      # - BILLING_EMAIL_FROM=licenses@example.com
+      # - BILLING_SMTP_HOST=smtp.example.com
+      # - BILLING_SMTP_USERNAME=...
+      # - BILLING_SMTP_PASSWORD=...
     volumes:
       - hub-data:/app/data
     healthcheck:

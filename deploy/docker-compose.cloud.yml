@@ -1,0 +1,159 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: control_plane
+      POSTGRES_USER: control_plane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U control_plane -d control_plane"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [backend]
+
+  migrate:
+    image: control-plane-hub:${CONTROL_PLANE_VERSION:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    command: ["python", "-m", "hub.bootstrap"]
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      AUTO_MIGRATE: "true"
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:?set ED25519_PUBLIC_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+
+  hub:
+    image: control-plane-hub:${CONTROL_PLANE_VERSION:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      AUTO_MIGRATE: "false"
+      BACKGROUND_WORKERS_ENABLED: "false"
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: https://${DOMAIN:?set DOMAIN}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+      AGENT_BOOTSTRAP_TOKEN: ${AGENT_BOOTSTRAP_TOKEN:?set AGENT_BOOTSTRAP_TOKEN}
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:?set ED25519_PUBLIC_KEY}
+      LICENSE_SIGNING_PRIVATE_KEY: ${LICENSE_SIGNING_PRIVATE_KEY:?set LICENSE_SIGNING_PRIVATE_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?set STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?set STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRODUCT_PLANS_JSON: ${STRIPE_PRODUCT_PLANS_JSON:?set STRIPE_PRODUCT_PLANS_JSON}
+      BILLING_SUCCESS_URL: https://${DOMAIN}/settings?checkout=success
+      BILLING_CANCEL_URL: https://${DOMAIN}/settings?checkout=canceled
+      BILLING_PORTAL_RETURN_URL: https://${DOMAIN}/settings
+      BILLING_EMAIL_ENABLED: ${BILLING_EMAIL_ENABLED:-false}
+      BILLING_EMAIL_FROM: ${BILLING_EMAIL_FROM:-}
+      BILLING_EMAIL_REPLY_TO: ${BILLING_EMAIL_REPLY_TO:-}
+      BILLING_SMTP_HOST: ${BILLING_SMTP_HOST:-}
+      BILLING_SMTP_PORT: ${BILLING_SMTP_PORT:-587}
+      BILLING_SMTP_USERNAME: ${BILLING_SMTP_USERNAME:-}
+      BILLING_SMTP_PASSWORD: ${BILLING_SMTP_PASSWORD:-}
+      BILLING_SMTP_SSL: ${BILLING_SMTP_SSL:-false}
+      BILLING_SMTP_STARTTLS: ${BILLING_SMTP_STARTTLS:-true}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks: [backend, edge]
+    deploy:
+      replicas: ${HUB_REPLICAS:-2}
+
+  worker:
+    image: control-plane-hub:${CONTROL_PLANE_VERSION:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    command: ["python", "-m", "hub.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      AUTO_MIGRATE: "false"
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      BILLING_EMAIL_ENABLED: ${BILLING_EMAIL_ENABLED:-false}
+      BILLING_EMAIL_FROM: ${BILLING_EMAIL_FROM:-}
+      BILLING_EMAIL_REPLY_TO: ${BILLING_EMAIL_REPLY_TO:-}
+      BILLING_SMTP_HOST: ${BILLING_SMTP_HOST:-}
+      BILLING_SMTP_PORT: ${BILLING_SMTP_PORT:-587}
+      BILLING_SMTP_USERNAME: ${BILLING_SMTP_USERNAME:-}
+      BILLING_SMTP_PASSWORD: ${BILLING_SMTP_PASSWORD:-}
+      BILLING_SMTP_SSL: ${BILLING_SMTP_SSL:-false}
+      BILLING_SMTP_STARTTLS: ${BILLING_SMTP_STARTTLS:-true}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks: [backend]
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    restart: unless-stopped
+    environment:
+      HUB_URL: http://hub:8080
+    depends_on:
+      hub:
+        condition: service_healthy
+    networks: [edge]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      hub:
+        condition: service_healthy
+      dashboard:
+        condition: service_started
+    networks: [edge]
+
+networks:
+  backend:
+    internal: true
+  edge:
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

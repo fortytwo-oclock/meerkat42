@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -11,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"control-plane/pkg/telemetry"
+	"github.com/gorilla/websocket"
 )
 
 // CommandHandler executes a HubCommand and returns a JSON-serialisable result.

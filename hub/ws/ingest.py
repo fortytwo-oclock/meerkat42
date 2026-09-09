@@ -15,7 +15,7 @@ from hub.repositories import nodes as nodes_repo
 from hub.repositories import vault as vault_repo
 from hub.services import alerting
 from hub.timeseries.base import extract_scalars
-from hub.ws.bus import active_agents, bus
+from hub.ws.bus import bus
 
 log = logging.getLogger("hub.ingest")
 router = APIRouter()
@@ -67,12 +67,11 @@ async def agent_stream(websocket: WebSocket) -> None:
         await websocket.close(code=4003)
         return
 
-    if active_agents.get(node_id) is not None:
+    if not await bus.claim_agent(node_id, websocket):
         log.warning("node %s already has a live connection; rejecting duplicate", node_id)
         await websocket.send_json({"error": "ALREADY_CONNECTED", "message": "node already streaming"})
         await websocket.close(code=4409)
         return
-    active_agents[node_id] = websocket
     log.info("agent connected: %s from %s", node_id, client_ip)
 
     try:
@@ -124,8 +123,7 @@ async def agent_stream(websocket: WebSocket) -> None:
     except Exception:  # pragma: no cover
         log.exception("stream error for node %s", node_id)
     finally:
-        if active_agents.get(node_id) is websocket:
-            active_agents.pop(node_id, None)
+        await bus.release_agent(node_id, websocket)
 
 
 async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> None:

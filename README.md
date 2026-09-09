@@ -46,6 +46,23 @@ pip install -r hub/requirements.txt && uvicorn hub.main:app --reload   # :8080
 cd frontend && npm install && npm run dev                              # :3000
 ```
 
+## Managed-cloud baseline
+
+`deploy/docker-compose.cloud.yml` provides a production-shaped single-host
+deployment with PostgreSQL, an internal database network, the Hub and dashboard,
+and Caddy for automatic TLS plus same-origin REST/WebSocket routing.
+
+```bash
+cp deploy/cloud.env.example deploy/cloud.env
+# Replace every placeholder and point DOMAIN DNS at the host.
+docker compose --env-file deploy/cloud.env \
+  -f deploy/docker-compose.cloud.yml up -d --build
+```
+
+Keep the Hub at one replica for now: live agent connections and command routing
+still use an in-memory registry. Horizontal Hub scaling requires a distributed
+connection/command backplane and is deliberately not implied by this manifest.
+
 ## Editions
 
 | | Community (default) | Enterprise (offline license) | Hosted Cloud |
@@ -79,4 +96,32 @@ cd frontend && npm install && npm run dev                              # :3000
     `/api/v1/tokens` (owner only).
   - **White-labeling:** `/api/v1/branding` serves `white_label_name` / `_logo` /
     `_color` from the license claims; the dashboard shell applies them.
-- **Phase 5 — Stripe license automation + managed cloud:** pending.
+- **Phase 5 — Billing automation + managed cloud:** ✅ Stripe subscription
+  webhooks are raw-body/HMAC verified, replay
+  bounded, idempotently recorded, and mapped by product to Ed25519 license
+  claims. Active/trialing subscriptions issue tenant-bound offline licenses;
+  subscription state and issued tokens are durable and owner-gated. Hosted
+  Checkout, Stripe Billing Portal sessions, dashboard license retrieval, and a
+  PostgreSQL+Caddy cloud deployment are included. Customer email delivery uses
+  a durable SMTP outbox with bounded retries. An optional Redis backplane adds
+  expiring agent ownership leases, cross-replica reverse-tunnel commands, and UI
+  event fan-out; the cloud stack runs migrations/seeding once, starts two Hub
+  replicas, and isolates background jobs in one worker to prevent duplicate sends.
+
+## Verification
+
+The repository CI workflow validates every component on each push and pull
+request: Go unit tests (including the Vault encryption and tunnel command-result
+paths), race detection, `go vet`, native and Linux amd64/arm64 agent builds, the
+Alembic upgrade/check/downgrade/upgrade cycle, Hub API smoke tests, and the
+Next.js production build.
+
+Run the release checks locally with:
+
+```bash
+go test ./cmd/... ./pkg/...
+go vet ./cmd/... ./pkg/...
+go build ./cmd/... ./pkg/...
+python -m unittest discover -s hub/tests -v
+cd frontend && npm run build
+```

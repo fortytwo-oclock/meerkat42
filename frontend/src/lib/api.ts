@@ -113,6 +113,34 @@ export interface MetricSeries {
   points: { ts: string; value: number }[];
 }
 
+export interface BillingSubscription {
+  stripe_customer_id: string;
+  stripe_subscription_id: string;
+  stripe_product_id: string;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
+export interface BillingPlan {
+  product_id: string;
+  tier: string;
+  max_nodes: number;
+  features: string[];
+}
+
+export interface IssuedBillingLicense {
+  license_token: string;
+  claims: Record<string, unknown>;
+  issued_at: string;
+  expires_at: string | null;
+  delivery_email: string | null;
+  delivery_status: "PENDING" | "RETRY" | "SENT" | "FAILED" | "SKIPPED";
+  delivery_attempts: number;
+  delivered_at: string | null;
+  delivery_error: string | null;
+}
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 /** Optional operator token for mutating endpoints when the hub sets ADMIN_TOKEN. */
@@ -212,6 +240,24 @@ export const api = {
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/backup`,
       { method: "POST" },
     ),
+
+  billingSubscription: () =>
+    j<BillingSubscription>(`/api/v1/billing/subscription`),
+  billingLicense: () => j<IssuedBillingLicense>(`/api/v1/billing/license`),
+  retryBillingLicenseDelivery: () =>
+    j<{ status: string }>(`/api/v1/billing/license/retry`, { method: "POST" }),
+  billingPlans: () => j<{ plans: BillingPlan[] }>(`/api/v1/billing/plans`),
+  createCheckout: (product_id: string, customer_email?: string) =>
+    j<{ url: string }>(`/api/v1/billing/checkout`, {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ product_id, customer_email: customer_email || null }),
+    }),
+  createBillingPortal: () =>
+    j<{ url: string }>(`/api/v1/billing/portal`, {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+    }),
 };
 
 export function wsUrl(path: string): string {
