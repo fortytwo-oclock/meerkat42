@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 
 	"control-plane/pkg/telemetry"
 	"control-plane/pkg/tunnel"
+	"control-plane/pkg/vault"
 )
 
 func getEnv(key, defaultVal string) string {
@@ -18,6 +20,37 @@ func getEnv(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+// buildCommandHandler wires the downstream HubCommand actions the agent supports.
+func buildCommandHandler() tunnel.CommandHandler {
+	return func(action string, payload map[string]interface{}) (interface{}, error) {
+		switch action {
+		case "request_config_backup":
+			keyB64 := os.Getenv("VAULT_KEY")
+			if keyB64 == "" {
+				return nil, fmt.Errorf("VAULT_KEY not configured on this agent")
+			}
+			roots := vault.SplitPaths(getEnv("VAULT_PATHS", "/host/compose"))
+			maxBytes := 5 * 1024 * 1024
+			if v := os.Getenv("VAULT_MAX_BYTES"); v != "" {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					maxBytes = n
+				}
+			}
+			log.Printf("[Vault] Config backup requested; scanning %v", roots)
+			res, err := vault.Backup(roots, keyB64, maxBytes)
+			if err != nil {
+				return nil, err
+			}
+			log.Printf("[Vault] Encrypted %d file(s) for hub storage", len(res.Files))
+			return res, nil
+		case "ping":
+			return map[string]string{"pong": "ok"}, nil
+		default:
+			return nil, fmt.Errorf("unsupported action %q", action)
+		}
+	}
 }
 
 func main() {
@@ -51,11 +84,12 @@ func main() {
 	collector := telemetry.NewCollector()
 
 	cfg := tunnel.Config{
-		HubURL:       hubURL,
-		NodeID:       nodeID,
-		AuthToken:    authToken,
-		ClientGroup:  clientGroup,
-		PushInterval: time.Duration(intervalSec) * time.Second,
+		HubURL:         hubURL,
+		NodeID:         nodeID,
+		AuthToken:      authToken,
+		ClientGroup:    clientGroup,
+		PushInterval:   time.Duration(intervalSec) * time.Second,
+		CommandHandler: buildCommandHandler(),
 	}
 
 	client := tunnel.NewClient(cfg, collector)

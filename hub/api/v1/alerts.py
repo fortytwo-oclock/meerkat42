@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_license_manager, get_tenant_id, require_admin
+from hub.deps import (
+    Principal,
+    get_license_manager,
+    get_tenant_id,
+    require_admin,
+    viewer_scope,
+)
 from hub.license_manager import LicenseManager
 from hub.models.alert import AlertMetric, AlertState, Comparator, Severity
 from hub.repositories import alerts as alerts_repo
@@ -21,7 +27,10 @@ async def active_alerts(
     client_group: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
+    scope: str | None = Depends(viewer_scope),
 ) -> dict:
+    if scope:  # viewer token locked to one client group
+        client_group = scope
     events = await alerts_repo.active_events(session, tenant_id, group_slug=client_group)
     return {
         "alerts": [
@@ -48,7 +57,7 @@ async def ack_alert(
     event_id: str,
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
-    principal: str = Depends(require_admin),
+    principal: Principal = Depends(require_admin),
 ) -> dict:
     event = await alerts_repo.get_event_for_tenant(session, tenant_id, event_id)
     if event is None:
@@ -56,7 +65,7 @@ async def ack_alert(
     if event.state != AlertState.RESOLVED:
         event.state = AlertState.ACKNOWLEDGED
         event.acknowledged_at = datetime.now(timezone.utc)
-        event.acknowledged_by = principal  # authenticated principal, never client-supplied
+        event.acknowledged_by = principal.label  # authenticated principal, never client-supplied
     await session.commit()
     return {"id": event.id, "state": event.state.value}
 

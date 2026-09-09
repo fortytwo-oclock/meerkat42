@@ -43,20 +43,30 @@ Swap the whole store (VictoriaMetrics / Timescale) by implementing `MetricStore`
 and assigning `app.state.metric_store` in `main.py` — ingestion and the API are
 storage-agnostic.
 
-## Auth
-
-Phase-1 baseline (full RBAC / client portals are Phase 4):
+## Auth & RBAC
 
 - `AGENT_BOOTSTRAP_TOKEN` — shared secret the edge agent sends as `X-Auth-Token`;
-  the WS ingest handler rejects mismatches with close code `4401`. The node
-  identity is taken from the handshake and **pinned** — later frames cannot
-  reassign it (`node_id` on a telemetry frame that disagrees is ignored).
-- `ADMIN_TOKEN` — when set, mutating REST endpoints (`POST /license`,
-  `POST/DELETE /groups`, `POST/DELETE /alert-rules`, `POST /alerts/{id}/ack`)
-  require `Authorization: Bearer <token>` or `X-Admin-Token`. Unset = open
-  single-operator mode. `acknowledged_by` is always the authenticated principal,
-  never client-supplied.
-- All node-addressed reads are tenant-scoped (cross-tenant IDs return 404).
+  the WS ingest handler rejects mismatches with close code `4401`. Node identity
+  comes from the handshake and is **pinned** — later frames cannot reassign it.
+- **Principals** (`hub/deps.py`): a request is authenticated via
+  `Authorization: Bearer <token>` / `X-Admin-Token` against `ADMIN_TOKEN` (→ `owner`)
+  or the `api_tokens` table (`owner` / `admin` / `viewer`). With nothing
+  configured the hub runs in open single-operator mode (`owner`, "anonymous").
+- `require_role(...)` gates endpoints: mutations need `admin`, token management
+  needs `owner`. A `viewer` token may be scoped to one `client_group`
+  (`viewer_scope` dependency) and then sees only that group's nodes and alerts;
+  cross-scope IDs return 404. `acknowledged_by` is always the principal label.
+- All node-addressed reads are tenant-scoped.
+
+## Infrastructure Vault (Phase 4)
+
+`POST /api/v1/nodes/{id}/backup` sends `request_config_backup` down the node's live
+tunnel. The agent encrypts each compose/env file (AES-256-GCM, per-file 12-byte
+nonce, AAD = relative path) under its `VAULT_KEY` and returns a `command_result`
+frame; the ingest handler persists it to `config_backups` as ciphertext. The hub
+cannot decrypt. `GET /api/v1/backups/{id}` returns the encrypted blob; restore with
+`python scripts/vault_decrypt.py --key "$VAULT_KEY" --in backup.json --out ./restored`.
+Feature-gated on `vault_backup`; `VAULT_MAX_BACKUP_BYTES` caps upload size.
 
 ## Run locally
 

@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { setAdminToken, api, type AlertRule, type Channel } from "@/lib/api";
+import {
+  setAdminToken,
+  api,
+  type AlertRule,
+  type ApiTokenInfo,
+  type Channel,
+} from "@/lib/api";
 
 const KIND_HINT: Record<string, string> = {
   discord: '{ "url": "https://discord.com/api/webhooks/..." }',
@@ -19,6 +25,8 @@ const KIND_HINT: Record<string, string> = {
 export default function SettingsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [rules, setRules] = useState<AlertRule[]>([]);
+  const [tokens, setTokens] = useState<ApiTokenInfo[] | null>(null);
+  const [newToken, setNewToken] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [token, setToken] = useState("");
 
@@ -36,6 +44,11 @@ export default function SettingsPage() {
       setErr(null);
     } catch (e: any) {
       setErr(e.message);
+    }
+    try {
+      setTokens((await api.tokens()).tokens);
+    } catch {
+      setTokens(null); // not owner / not configured
     }
   }, []);
 
@@ -222,6 +235,108 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {tokens !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>API tokens & client portals</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {newToken && (
+              <div className="rounded-md border border-emerald-600/40 bg-emerald-600/10 p-2 text-xs">
+                Copy now — shown once:
+                <code className="ml-1 break-all font-mono">{newToken}</code>
+              </div>
+            )}
+            {tokens.map((t) => (
+              <div key={t.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
+                <div>
+                  <span className="font-medium">{t.name}</span>{" "}
+                  <Badge variant="secondary">{t.role}</Badge>{" "}
+                  {t.group_id && <Badge variant="outline">scoped</Badge>}
+                  {t.revoked && <Badge variant="destructive">revoked</Badge>}
+                  <p className="text-xs text-muted-foreground">
+                    by {t.created_by} ·{" "}
+                    {t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleString()}` : "never used"}
+                  </p>
+                </div>
+                {!t.revoked && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => guard(() => api.revokeToken(t.id))}
+                  >
+                    Revoke
+                  </Button>
+                )}
+              </div>
+            ))}
+            <NewTokenForm
+              onCreate={async (b) => {
+                try {
+                  const res = await api.createToken(b);
+                  setNewToken(res.token);
+                  await load();
+                } catch (e: any) {
+                  setErr(e.message);
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function NewTokenForm({
+  onCreate,
+}: {
+  onCreate: (b: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("viewer");
+  const [groupSlug, setGroupSlug] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
+      <Input
+        className="w-40"
+        placeholder="Token name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <select
+        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        value={role}
+        onChange={(e) => setRole(e.target.value)}
+      >
+        {["viewer", "admin", "owner"].map((r) => (
+          <option key={r}>{r}</option>
+        ))}
+      </select>
+      {role === "viewer" && (
+        <Input
+          className="w-40"
+          placeholder="group slug (optional)"
+          value={groupSlug}
+          onChange={(e) => setGroupSlug(e.target.value)}
+        />
+      )}
+      <Button
+        size="sm"
+        disabled={!name.trim()}
+        onClick={() => {
+          onCreate({
+            name: name.trim(),
+            role,
+            group_slug: role === "viewer" && groupSlug.trim() ? groupSlug.trim() : null,
+          });
+          setName("");
+          setGroupSlug("");
+        }}
+      >
+        Create token
+      </Button>
     </div>
   );
 }

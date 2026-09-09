@@ -12,12 +12,19 @@ services:
       - AUTH_TOKEN=agent_secret_token_change_me
       - CLIENT_GROUP=Client-Apex
       - PUSH_INTERVAL_SEC=10
+      # Infrastructure Vault (Phase 4, enterprise). 32-byte AES-256 key, base64:
+      #   openssl rand -base64 32
+      # The hub never receives this key; keep it wherever you keep your DR secrets.
+      # - VAULT_KEY=CHANGE_ME_base64_32_bytes
+      # - VAULT_PATHS=/host/compose:/host/stacks
     volumes:
       # Read-only Docker socket for container lifecycle & crash-loop monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Read-only host kernel /proc & /sys for CPU, RAM, load, and storage metrics
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      # Read-only compose/.env locations for encrypted config backups (Vault)
+      # - /opt/stacks:/host/compose:ro
     # Optional: Give SYS_RAWIO capability only if deep S.M.A.R.T. disk scanning is needed
     cap_add:
       - SYS_RAWIO

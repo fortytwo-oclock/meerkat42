@@ -13,7 +13,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { api, type MetricSeries } from "@/lib/api";
+import { api, type BackupMeta, type MetricSeries } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 export default function NodeDetailPage({ params }: { params: { id: string } }) {
   const id = decodeURIComponent(params.id);
@@ -21,6 +22,21 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   const [cpu, setCpu] = useState<MetricSeries | null>(null);
   const [ram, setRam] = useState<MetricSeries | null>(null);
   const [range, setRange] = useState(6);
+  const [backups, setBackups] = useState<BackupMeta[] | null>(null);
+  const [vaultMsg, setVaultMsg] = useState<string | null>(null);
+
+  const loadBackups = async () => {
+    try {
+      setBackups((await api.backups(id)).backups);
+    } catch (e: any) {
+      // 402 = not licensed, 401 = needs token — hide the section quietly
+      setBackups(null);
+    }
+  };
+  useEffect(() => {
+    loadBackups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   useEffect(() => {
     const load = async () => {
@@ -148,6 +164,67 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
             )}
           </CardContent>
         </Card>
+
+        {backups !== null && (
+          <Card className="md:col-span-2">
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>Infrastructure Vault</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  setVaultMsg(null);
+                  try {
+                    await api.requestBackup(id);
+                    setVaultMsg("Backup requested — the agent is encrypting now.");
+                    setTimeout(loadBackups, 2000);
+                  } catch (e: any) {
+                    setVaultMsg(e.message);
+                  }
+                }}
+              >
+                Request backup
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {vaultMsg && <p className="text-xs text-muted-foreground">{vaultMsg}</p>}
+              {backups.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No backups yet. Encrypted compose / .env snapshots stored on the hub.
+                </p>
+              )}
+              {backups.map((b) => (
+                <div key={b.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <span>
+                    {new Date(b.requested_at).toLocaleString()} · {b.requested_by}
+                  </span>
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {b.status === "COMPLETE"
+                      ? `${b.file_count} file(s), ${b.total_bytes} B · key ${b.key_fingerprint}`
+                      : b.status === "ERROR"
+                        ? b.error
+                        : "pending…"}
+                    <Badge
+                      variant={
+                        b.status === "COMPLETE"
+                          ? "success"
+                          : b.status === "ERROR"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {b.status}
+                    </Badge>
+                  </span>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Ciphertext only — decrypt locally with{" "}
+                <code>scripts/vault_decrypt.py</code>.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="md:col-span-2">
           <CardHeader>

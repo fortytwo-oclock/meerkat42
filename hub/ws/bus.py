@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import uuid
 from typing import Any
 
 
@@ -32,3 +33,23 @@ bus = EventBus()
 
 # Live agent connections, so the Hub can push HubCommand messages downstream.
 active_agents: dict[str, Any] = {}
+
+
+async def send_command(
+    node_id: str, action: str, payload: dict | None = None
+) -> str | None:
+    """Push a HubCommand down a node's live tunnel. Returns the command_id, or
+    None if the node has no active connection."""
+    ws = active_agents.get(node_id)
+    if ws is None:
+        return None
+    command_id = uuid.uuid4().hex
+    await ws.send_json(
+        {
+            "type": "command",
+            "command_id": command_id,
+            "action": action,
+            "payload": payload or {},
+        }
+    )
+    return command_id

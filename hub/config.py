@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # Per-channel minimum gap between messages, anti-spam.
     channel_min_interval_seconds: int = 15
     dispatch_http_timeout_seconds: float = 10.0
+    # Allow the generic 'webhook' kind to target http:// and private/LAN addresses
+    # (e.g. a self-hosted ntfy/gotify on the same network). discord/slack stay
+    # locked to their public hosts regardless.
+    webhook_allow_insecure: bool = False
+
+    # --- Infrastructure Vault (Phase 4) -----------------------------
+    vault_enabled: bool = True
+    vault_max_backup_bytes: int = 5 * 1024 * 1024  # reject oversized agent uploads
+    vault_backup_timeout_seconds: int = 60
 
     # --- Multi-tenancy -------------------------------------------------
     default_tenant_slug: str = "default"

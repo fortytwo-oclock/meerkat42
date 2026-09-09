@@ -67,4 +67,16 @@ cd frontend && npm install && npm run dev                              # :3000
   channels, `MetricStore`-style pluggable senders, FIRING + RESOLVED delivery,
   flapping suppression + per-channel anti-spam throttle, mute, `/test`. Auth
   (`AGENT_BOOTSTRAP_TOKEN`, `ADMIN_TOKEN`) added ahead of schedule.
-- **Phase 4 — Vault / RBAC / white-label**, **Phase 5 — Stripe + cloud:** pending.
+- **Phase 4 — Enterprise / MSP:** ✅
+  - **Infrastructure Vault:** hub issues `request_config_backup` down the tunnel;
+    the Go agent (`pkg/vault`) AES-256-GCM encrypts every `docker-compose.y*ml` /
+    `*.env` under `VAULT_KEY` (32-byte, base64) and streams ciphertext back. The
+    hub stores ciphertext only; restore offline with `scripts/vault_decrypt.py`.
+    Gated on the `vault_backup` license feature.
+  - **RBAC & client portals:** `api_tokens` table with `owner` / `admin` /
+    `viewer` roles; viewer tokens are scoped to one `client_group` and see only
+    that group's nodes/alerts. `ADMIN_TOKEN` acts as owner. Token CRUD at
+    `/api/v1/tokens` (owner only).
+  - **White-labeling:** `/api/v1/branding` serves `white_label_name` / `_logo` /
+    `_color` from the license claims; the dashboard shell applies them.
+- **Phase 5 — Stripe license automation + managed cloud:** pending.

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_metric_store, get_tenant_id
+from hub.deps import get_metric_store, get_tenant_id, viewer_scope
 from hub.repositories import groups as groups_repo
 from hub.repositories import nodes as nodes_repo
 from hub.timeseries import MetricStore
@@ -41,7 +41,10 @@ async def list_nodes(
     client_group: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
+    scope: str | None = Depends(viewer_scope),
 ) -> dict:
+    if scope:
+        client_group = scope
     groups = {g.id: g.slug for g in await groups_repo.list_groups(session, tenant_id)}
     nodes = await nodes_repo.list_for_tenant(session, tenant_id, group_slug=client_group)
     results = [_summary(n, groups.get(n.group_id, "default")) for n in nodes]
@@ -53,12 +56,15 @@ async def get_node(
     node_id: str,
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
+    scope: str | None = Depends(viewer_scope),
 ) -> dict:
     node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
     if not node:
         raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
     groups = {g.id: g for g in await groups_repo.list_groups(session, tenant_id)}
     group = groups.get(node.group_id)
+    if scope and (group is None or group.slug != scope):
+        raise HTTPException(status_code=404, detail=f"Node {node_id} not found")
     return {
         "node_id": node.node_id,
         "hostname": node.hostname,
@@ -84,10 +90,15 @@ async def node_metrics(
     session: AsyncSession = Depends(get_session),
     store: MetricStore = Depends(get_metric_store),
     tenant_id: str = Depends(get_tenant_id),
+    scope: str | None = Depends(viewer_scope),
 ) -> dict:
     node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
+    if scope:
+        groups = {g.id: g.slug for g in await groups_repo.list_groups(session, tenant_id)}
+        if groups.get(node.group_id) != scope:
+            raise HTTPException(status_code=404, detail="Node not found")
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=range_hours)
     series = await store.query(node_id, metric, start, end)

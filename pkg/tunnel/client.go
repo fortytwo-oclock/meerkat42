@@ -15,13 +15,28 @@ import (
 	"control-plane/pkg/telemetry"
 )
 
+// CommandHandler executes a HubCommand and returns a JSON-serialisable result.
+// A non-nil error is reported back to the hub as a failed command_result.
+type CommandHandler func(action string, payload map[string]interface{}) (interface{}, error)
+
 // Config holds connection parameters for the outbound tunnel.
 type Config struct {
-	HubURL       string        // e.g. "wss://control.example.com/api/v1/agent/stream" or "ws://localhost:8080/api/v1/agent/stream"
-	NodeID       string
-	AuthToken    string
-	ClientGroup  string
-	PushInterval time.Duration // default: 10s
+	HubURL         string // "wss://hub.example.com/api/v1/agent/stream" or "ws://localhost:8080/..."
+	NodeID         string
+	AuthToken      string
+	ClientGroup    string
+	PushInterval   time.Duration // default: 10s
+	CommandHandler CommandHandler
+}
+
+// commandResult is the frame sent upstream in reply to a HubCommand.
+type commandResult struct {
+	Type      string      `json:"type"`
+	CommandID string      `json:"command_id"`
+	Action    string      `json:"action"`
+	OK        bool        `json:"ok"`
+	Error     string      `json:"error,omitempty"`
+	Result    interface{} `json:"result,omitempty"`
 }
 
 // Client manages the persistent outbound WebSocket to the Control Plane Hub.
@@ -135,6 +150,7 @@ func (c *Client) connectAndStream(ctx context.Context) error {
 				return
 			}
 			log.Printf("[Tunnel] Received hub command: %s (ID: %s)", cmd.Action, cmd.CommandID)
+			go c.handleCommand(cmd)
 		}
 	}()
 
@@ -166,6 +182,31 @@ func (c *Client) connectAndStream(ctx context.Context) error {
 				data.HostMetrics.Load1, data.HostMetrics.RAMUsagePct, len(data.Containers), len(data.ZFS))
 		}
 	}
+}
+
+// handleCommand runs a HubCommand via the configured handler and writes the
+// result back over the same tunnel.
+func (c *Client) handleCommand(cmd telemetry.HubCommand) {
+	res := commandResult{Type: "command_result", CommandID: cmd.CommandID, Action: cmd.Action}
+
+	if c.cfg.CommandHandler == nil {
+		res.Error = "agent has no command handler configured"
+	} else if out, err := c.cfg.CommandHandler(cmd.Action, cmd.Payload); err != nil {
+		res.Error = err.Error()
+	} else {
+		res.OK = true
+		res.Result = out
+	}
+
+	c.mu.Lock()
+	conn := c.conn
+	if conn != nil {
+		conn.SetWriteDeadline(time.Now().Add(15 * time.Second))
+		if err := conn.WriteJSON(res); err != nil {
+			log.Printf("[Tunnel] Failed to send command_result for %s: %v", cmd.CommandID, err)
+		}
+	}
+	c.mu.Unlock()
 }
 
 func (c *Client) closeConnection() {

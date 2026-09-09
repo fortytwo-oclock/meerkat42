@@ -12,6 +12,7 @@ from hub.config import get_settings
 from hub.db.session import session_scope
 from hub.repositories import alerts as alerts_repo
 from hub.repositories import nodes as nodes_repo
+from hub.repositories import vault as vault_repo
 from hub.services import alerting
 from hub.timeseries.base import extract_scalars
 from hub.ws.bus import active_agents, bus
@@ -93,6 +94,11 @@ async def agent_stream(websocket: WebSocket) -> None:
             frame_id = data.get("node_id")
             if frame_id and frame_id != node_id:
                 log.warning("node %s sent frame for %s; ignoring spoofed id", node_id, frame_id)
+
+            if data.get("type") == "command_result":
+                await _handle_command_result(node_id, tenant_id, data)
+                continue
+
             ts = _parse_ts(data.get("timestamp"))
 
             async with session_scope() as session:
@@ -120,6 +126,46 @@ async def agent_stream(websocket: WebSocket) -> None:
     finally:
         if active_agents.get(node_id) is websocket:
             active_agents.pop(node_id, None)
+
+
+async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> None:
+    """Persist an agent's response to a hub-issued command (currently: config backup)."""
+    command_id = data.get("command_id")
+    action = data.get("action")
+    if not command_id:
+        return
+    if action != "request_config_backup":
+        log.info("node %s: unhandled command_result action %r", node_id, action)
+        return
+
+    settings = get_settings()
+    result = data.get("result") or {}
+    files = result.get("files") or []
+    total = sum(int(f.get("size", 0)) for f in files)
+    error = data.get("error")
+    if not error and total > settings.vault_max_backup_bytes:
+        error = f"backup too large ({total} bytes)"
+        files = []
+
+    async with session_scope() as session:
+        backup = await vault_repo.complete(
+            session,
+            command_id,
+            files=files,
+            key_fingerprint=result.get("key_fingerprint"),
+            error=error,
+        )
+        if backup is None:
+            log.warning("command_result for unknown command_id %s", command_id)
+            return
+    await bus.publish(
+        {
+            "type": "backup.complete",
+            "node_id": node_id,
+            "command_id": command_id,
+            "status": "ERROR" if error else "COMPLETE",
+        }
+    )
 
 
 def _parse_ts(raw) -> datetime:

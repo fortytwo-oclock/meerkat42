@@ -14,9 +14,13 @@ services:
       - LOG_LEVEL=info
       # Shared secret every edge agent must present (must match the agent's AUTH_TOKEN).
       - AGENT_BOOTSTRAP_TOKEN=agent_secret_token_change_me
-      # Required for mutating REST endpoints (license/groups/alert-rules/ack).
-      # Leave unset only for a trusted single-operator LAN deployment.
+      # Required for mutating REST endpoints (license/groups/alert-rules/ack) and
+      # to act as an "owner" for token management. Leave unset only for a trusted
+      # single-operator LAN deployment with no issued API tokens.
       - ADMIN_TOKEN=admin_token_change_me
+      # Allow the generic 'webhook' channel kind to hit http:// and LAN addresses
+      # (e.g. a self-hosted ntfy/gotify). discord/slack stay locked to public hosts.
+      # - WEBHOOK_ALLOW_INSECURE=true
       # Self-hosted default: embedded SQLite. For cloud, point at Postgres:
       # - DATABASE_URL=postgresql+asyncpg://hub:hub@postgres:5432/hub
       - DATABASE_URL=sqlite+aiosqlite:////app/data/hub.db

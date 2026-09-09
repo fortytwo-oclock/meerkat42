@@ -7,15 +7,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.models import NotificationChannel
 
-# secret-ish config keys never echoed back to clients
-_REDACT = ("password", "headers")
+# config keys that are themselves credentials — a webhook URL grants posting
+# rights, so it is fingerprinted, not echoed back in full.
+_MASK_FULL = ("password", "headers", "token")
+_FINGERPRINT = ("url",)
+
+
+def _fingerprint(value: str) -> str:
+    try:
+        from urllib.parse import urlsplit
+
+        p = urlsplit(value)
+        return f"{p.scheme}://{p.netloc}/…{value[-4:]}"
+    except Exception:
+        return "***" + str(value)[-4:]
 
 
 def redact(ch: NotificationChannel) -> dict:
     cfg = dict(ch.config or {})
-    for k in _REDACT:
-        if k in cfg:
+    for k in _MASK_FULL:
+        if cfg.get(k):
             cfg[k] = "***"
+    for k in _FINGERPRINT:
+        if cfg.get(k):
+            cfg[k] = _fingerprint(str(cfg[k]))
     return {
         "id": ch.id,
         "name": ch.name,

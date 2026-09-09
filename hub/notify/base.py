@@ -80,7 +80,7 @@ class WebhookSender(Sender):
         body = {"alert": payload.as_dict(), "title": payload.title}
         if extra := self.config.get("extra"):
             body.update(extra)
-        await _post(url, json=body, headers=self.config.get("headers"))
+        await _post(url, json=body, headers=self.config.get("headers"), kind="webhook")
 
 
 class DiscordSender(Sender):
@@ -105,6 +105,7 @@ class DiscordSender(Sender):
                     }
                 ]
             },
+            kind="discord",
         )
 
 
@@ -131,6 +132,7 @@ class SlackSender(Sender):
                     }
                 ],
             },
+            kind="slack",
         )
 
 
@@ -191,13 +193,19 @@ def build_sender(kind: str, config: dict) -> Sender:
     return cls(config)
 
 
-async def _post(url: str, *, json: dict, headers: dict | None = None) -> None:
+async def _post(
+    url: str, *, json: dict, headers: dict | None = None, kind: str = "webhook"
+) -> None:
+    # Re-validate right before the request — DNS may have changed since create.
+    from hub.notify.urlguard import validate_webhook_url
+
+    await asyncio.to_thread(validate_webhook_url, url, kind)
     try:
         async with httpx.AsyncClient(
-            timeout=_settings.dispatch_http_timeout_seconds
+            timeout=_settings.dispatch_http_timeout_seconds, follow_redirects=False
         ) as client:
             resp = await client.post(url, json=json, headers=headers or {})
         if resp.status_code >= 300:
-            raise ChannelError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+            raise ChannelError(f"HTTP {resp.status_code}")
     except httpx.HTTPError as exc:
-        raise ChannelError(str(exc)) from exc
+        raise ChannelError(f"{type(exc).__name__}") from exc

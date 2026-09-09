@@ -6,19 +6,31 @@ import { Button } from "@/components/ui/button";
 import { FleetMatrix } from "@/components/fleet-matrix";
 import { AlertsPanel } from "@/components/alerts-panel";
 import { LicenseModal } from "@/components/license-modal";
-import { api, type AlertEvent, type Group, type LicenseInfo } from "@/lib/api";
+import {
+  api,
+  type AlertEvent,
+  type Branding,
+  type Group,
+  type LicenseInfo,
+} from "@/lib/api";
 
 export default function DashboardPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [active, setActive] = useState<string | undefined>(undefined);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
+  const [branding, setBranding] = useState<Branding | null>(null);
   const [showLicense, setShowLicense] = useState(false);
 
   const loadMeta = useCallback(async () => {
-    const [g, l] = await Promise.all([api.groups(), api.license()]);
+    const [g, l, b] = await Promise.all([
+      api.groups(),
+      api.license(),
+      api.branding().catch(() => null),
+    ]);
     setGroups(g.groups);
     setLicense(l);
+    setBranding(b);
   }, []);
 
   const loadAlerts = useCallback(async () => {
@@ -36,16 +48,26 @@ export default function DashboardPage() {
     return () => clearInterval(t);
   }, [loadAlerts]);
 
+  const logo = branding?.logo_url ?? license?.white_label_logo ?? null;
+  const productName = branding?.product_name ?? "Control Plane";
+
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div
+      className="mx-auto max-w-7xl space-y-6 p-6"
+      style={
+        branding?.primary_color
+          ? ({ "--primary": branding.primary_color } as Record<string, string>)
+          : undefined
+      }
+    >
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">
-            {license?.white_label_logo ? (
+            {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={license.white_label_logo} alt="logo" className="h-7" />
+              <img src={logo} alt={productName} className="h-7" />
             ) : (
-              "Control Plane"
+              productName
             )}
           </h1>
           <p className="text-sm text-muted-foreground">

@@ -73,6 +73,39 @@ export interface AlertRule {
   is_builtin: boolean;
 }
 
+export interface Branding {
+  white_label: boolean;
+  product_name: string;
+  logo_url: string | null;
+  primary_color: string | null;
+  customer_name: string | null;
+  tier: string | null;
+}
+
+export interface ApiTokenInfo {
+  id: string;
+  name: string;
+  role: string;
+  group_id: string | null;
+  created_at: string;
+  created_by: string;
+  last_used_at: string | null;
+  revoked: boolean;
+}
+
+export interface BackupMeta {
+  id: string;
+  node_id: string;
+  status: "PENDING" | "COMPLETE" | "ERROR";
+  error: string | null;
+  file_count: number;
+  total_bytes: number;
+  key_fingerprint: string | null;
+  requested_by: string;
+  requested_at: string;
+  completed_at: string | null;
+}
+
 export interface MetricSeries {
   node_id: string;
   metric: string;
@@ -161,6 +194,24 @@ export const api = {
     j(`/api/v1/channels/${id}/mute`, { method: "POST", body: JSON.stringify({ minutes }) }),
   testChannel: (id: string) =>
     j<{ ok: boolean }>(`/api/v1/channels/${id}/test`, { method: "POST" }),
+
+  branding: () => j<Branding>(`/api/v1/branding`),
+
+  tokens: () => j<{ tokens: ApiTokenInfo[] }>(`/api/v1/tokens`),
+  createToken: (body: Record<string, unknown>) =>
+    j<ApiTokenInfo & { token: string }>(`/api/v1/tokens`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  revokeToken: (id: string) => j(`/api/v1/tokens/${id}`, { method: "DELETE" }),
+
+  backups: (nodeId: string) =>
+    j<{ backups: BackupMeta[] }>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/backups`),
+  requestBackup: (nodeId: string) =>
+    j<{ backup_id: string; status: string }>(
+      `/api/v1/nodes/${encodeURIComponent(nodeId)}/backup`,
+      { method: "POST" },
+    ),
 };
 
 export function wsUrl(path: string): string {
