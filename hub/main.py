@@ -20,6 +20,7 @@ from hub.models import AlertRule
 from hub.repositories import alerts as alerts_repo
 from hub.repositories import licenses as lic_repo
 from hub.repositories import tenants as tenants_repo
+from hub.notify.dispatcher import dispatch_loop
 from hub.services.alerting import BUILTIN_RULES
 from hub.services.liveness import rollup_loop, watchdog_loop
 from hub.timeseries import SqlMetricStore
@@ -86,6 +87,7 @@ async def lifespan(app: FastAPI):
     tasks = [
         asyncio.create_task(watchdog_loop(stop)),
         asyncio.create_task(rollup_loop(app.state.metric_store, stop)),
+        asyncio.create_task(dispatch_loop(stop)),
     ]
     log.info("hub %s ready (db=%s)", __version__, "sqlite" if settings.is_sqlite else "postgres")
     try:

@@ -49,6 +49,30 @@ export interface Group {
   node_count: number;
 }
 
+export interface Channel {
+  id: string;
+  name: string;
+  kind: "discord" | "slack" | "smtp" | "webhook";
+  config: Record<string, unknown>;
+  min_severity: string;
+  enabled: boolean;
+  muted_until: string | null;
+  last_error: string | null;
+  last_sent_at: string | null;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  metric: string;
+  comparator: string;
+  threshold: number | null;
+  duration_sec: number;
+  severity: string;
+  enabled: boolean;
+  is_builtin: boolean;
+}
+
 export interface MetricSeries {
   node_id: string;
   metric: string;
@@ -117,6 +141,26 @@ export const api = {
       body: JSON.stringify({ license_token }),
     }),
   groups: () => j<{ groups: Group[] }>(`/api/v1/groups`),
+
+  alertRules: () => j<{ rules: AlertRule[] }>(`/api/v1/alert-rules`),
+  createAlertRule: (body: Record<string, unknown>) =>
+    j(`/api/v1/alert-rules`, { method: "POST", body: JSON.stringify(body) }),
+  updateAlertRule: (id: string, body: Record<string, unknown>) =>
+    j(`/api/v1/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteAlertRule: (id: string) =>
+    j(`/api/v1/alert-rules/${id}`, { method: "DELETE" }),
+
+  channels: () => j<{ channels: Channel[] }>(`/api/v1/channels`),
+  createChannel: (body: Record<string, unknown>) =>
+    j<Channel>(`/api/v1/channels`, { method: "POST", body: JSON.stringify(body) }),
+  updateChannel: (id: string, body: Record<string, unknown>) =>
+    j<Channel>(`/api/v1/channels/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteChannel: (id: string) =>
+    j(`/api/v1/channels/${id}`, { method: "DELETE" }),
+  muteChannel: (id: string, minutes: number) =>
+    j(`/api/v1/channels/${id}/mute`, { method: "POST", body: JSON.stringify({ minutes }) }),
+  testChannel: (id: string) =>
+    j<{ ok: boolean }>(`/api/v1/channels/${id}/test`, { method: "POST" }),
 };
 
 export function wsUrl(path: string): string {

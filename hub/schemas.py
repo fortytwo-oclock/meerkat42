@@ -26,6 +26,26 @@ class AlertRuleCreate(BaseModel):
     enabled: bool = True
 
 
+class ChannelCreate(BaseModel):
+    name: str
+    kind: str  # discord | slack | smtp | webhook
+    config: dict
+    min_severity: str = "WARNING"
+    enabled: bool = True
+    group_slug: Optional[str] = None
+
+
+class ChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    config: Optional[dict] = None
+    min_severity: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class MuteRequest(BaseModel):
+    minutes: int = 60
+
+
 class NodeSummary(BaseModel):
     node_id: str
     hostname: str

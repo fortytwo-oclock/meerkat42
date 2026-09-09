@@ -1,5 +1,5 @@
 """SQLAlchemy models for the Hub persistence layer."""
-from hub.models.alert import AlertEvent, AlertRule
+from hub.models.alert import AlertEvent, AlertRule, NotificationChannel
 from hub.models.license import LicenseRecord
 from hub.models.metric import MetricPoint, MetricRollup
 from hub.models.node import ClientGroup, Node
@@ -12,6 +12,7 @@ __all__ = [
     "LicenseRecord",
     "AlertRule",
     "AlertEvent",
+    "NotificationChannel",
     "MetricPoint",
     "MetricRollup",
 ]

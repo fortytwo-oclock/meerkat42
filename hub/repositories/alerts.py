@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hub.config import get_settings
 from hub.models import AlertEvent, AlertRule, ClientGroup, Node
 from hub.models.alert import AlertState, Severity
 
@@ -104,6 +105,28 @@ async def open_or_update_event(
         event.value = value
         event.severity = severity
         return event
+
+    # Flapping protection: if an identical alert resolved very recently, create the
+    # event (so the dashboard still shows it) but mark it suppressed so the
+    # dispatcher does not send another notification.
+    flap_cut = datetime.now(timezone.utc) - timedelta(
+        seconds=get_settings().alert_flap_window_seconds
+    )
+    recent_resolved = (
+        await session.execute(
+            select(AlertEvent)
+            .where(
+                AlertEvent.node_id == node_id,
+                AlertEvent.type == type_,
+                AlertEvent.subject == subject,
+                AlertEvent.state == AlertState.RESOLVED,
+                AlertEvent.resolved_at.is_not(None),
+                AlertEvent.resolved_at >= flap_cut,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
     event = AlertEvent(
         rule_id=rule_id,
         node_id=node_id,
@@ -113,6 +136,7 @@ async def open_or_update_event(
         message=message,
         value=value,
         state=AlertState.FIRING,
+        suppressed=recent_resolved is not None,
     )
     session.add(event)
     await session.flush()

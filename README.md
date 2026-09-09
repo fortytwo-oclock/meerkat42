@@ -61,6 +61,10 @@ cd frontend && npm install && npm run dev                              # :3000
   metric_points, metric_rollups); Alembic; `MetricStore` interface + relational
   store with 10s/1m/5m downsampling and retention pruning; stateful alert events.
 - **Phase 2 — Dashboard:** ✅ scaffolded — Fleet Matrix, client-group filter, node
-  detail (containers / ZFS / SMART, history charts), license modal, live WS.
-- **Phase 3 — Alert dispatch** (Discord/Slack/SMTP/webhook), **Phase 4 —
-  Vault/RBAC/white-label**, **Phase 5 — Stripe + cloud:** pending.
+  detail (containers / ZFS / SMART, history charts), license modal, live WS,
+  settings page (alert triggers + notification channels).
+- **Phase 3 — Alert dispatch:** ✅ Discord / Slack / SMTP / generic webhook
+  channels, `MetricStore`-style pluggable senders, FIRING + RESOLVED delivery,
+  flapping suppression + per-channel anti-spam throttle, mute, `/test`. Auth
+  (`AGENT_BOOTSTRAP_TOKEN`, `ADMIN_TOKEN`) added ahead of schedule.
+- **Phase 4 — Vault / RBAC / white-label**, **Phase 5 — Stripe + cloud:** pending.

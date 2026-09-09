@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     ts_rollup_interval_seconds: float = 60.0
     ts_prune_interval_seconds: float = 3600.0
 
+    # --- Alert dispatch (Phase 3) ------------------------------------
+    dispatch_interval_seconds: float = 10.0
+    dispatch_enabled: bool = True
+    # Suppress a re-fire of an identical (node,type,subject) alert if the previous
+    # one resolved within this window — flapping protection.
+    alert_flap_window_seconds: int = 300
+    # Per-channel minimum gap between messages, anti-spam.
+    channel_min_interval_seconds: int = 15
+    dispatch_http_timeout_seconds: float = 10.0
+
     # --- Multi-tenancy -------------------------------------------------
     default_tenant_slug: str = "default"
     default_group_slug: str = "default"

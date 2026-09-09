@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FleetMatrix } from "@/components/fleet-matrix";
@@ -55,9 +56,17 @@ export default function DashboardPage() {
               : "…"}
           </p>
         </div>
-        <Button variant="outline" onClick={() => setShowLicense(true)}>
-          Manage license
-        </Button>
+        <div className="flex gap-2">
+          <Link
+            href="/settings"
+            className="inline-flex h-9 items-center rounded-md border border-input px-4 text-sm font-medium hover:bg-muted"
+          >
+            Settings
+          </Link>
+          <Button variant="outline" onClick={() => setShowLicense(true)}>
+            Manage license
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

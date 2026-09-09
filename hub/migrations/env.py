@@ -14,7 +14,8 @@ import hub.models  # noqa: F401  (register all tables on Base.metadata)
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # don't clobber the app's logging config when run in-process on startup
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

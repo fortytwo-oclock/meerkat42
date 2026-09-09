@@ -75,5 +75,18 @@ uvicorn hub.main:app --reload --port 8080
 - `GET/POST/DELETE /api/v1/alert-rules`
 - `GET/POST/DELETE /api/v1/groups`
 - `GET/POST /api/v1/license` — offline verify + persist
+- `GET/POST/PATCH/DELETE /api/v1/channels` — notification channels
+  (`discord` / `slack` / `smtp` / `webhook`); `POST .../{id}/test`, `.../{id}/mute`
 - `WS   /api/v1/agent/stream` — agent ingestion (unchanged protocol)
 - `WS   /api/v1/ui/stream` — live telemetry/alert push to dashboards
+
+## Alert dispatch (Phase 3)
+
+Background `dispatch_loop` picks up `AlertEvent`s and delivers to matching
+channels (`hub/notify/`): FIRING once (`dispatched_at`), then RESOLVED once
+(`resolve_notified_at`). A re-fire of an identical alert within
+`ALERT_FLAP_WINDOW_SECONDS` of its resolve is created but `suppressed` (shown on
+the dashboard, not re-notified). Per-channel `CHANNEL_MIN_INTERVAL_SECONDS`
+throttles FIRING bursts; RESOLVED always goes out. Channels have
+`min_severity`, `enabled`, `muted_until`. Add a transport by subclassing
+`Sender` in `hub/notify/base.py`.

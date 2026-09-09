@@ -119,6 +119,33 @@ async def create_rule(
     return {"id": rule.id, "name": rule.name}
 
 
+@router.patch("/alert-rules/{rule_id}")
+async def update_rule(
+    rule_id: str,
+    body: dict,
+    session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+    _: str = Depends(require_admin),
+) -> dict:
+    """Toggle / retune a rule — the dashboard's central alert-trigger controls."""
+    rule = await alerts_repo.get_rule_for_tenant(session, tenant_id, rule_id)
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    if "enabled" in body:
+        rule.enabled = bool(body["enabled"])
+    if "threshold" in body:
+        rule.threshold = body["threshold"]
+    if "severity" in body:
+        try:
+            rule.severity = Severity(body["severity"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid severity")
+    if "duration_sec" in body:
+        rule.duration_sec = int(body["duration_sec"])
+    await session.commit()
+    return {"id": rule.id, "enabled": rule.enabled}
+
+
 @router.delete("/alert-rules/{rule_id}")
 async def delete_rule(
     rule_id: str,
