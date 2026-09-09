@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"control-plane/pkg/proxmox"
 	"control-plane/pkg/telemetry"
 	"control-plane/pkg/tunnel"
 	"control-plane/pkg/vault"
@@ -23,7 +26,7 @@ func getEnv(key, defaultVal string) string {
 }
 
 // buildCommandHandler wires the downstream HubCommand actions the agent supports.
-func buildCommandHandler() tunnel.CommandHandler {
+func buildCommandHandler(proxmoxClient *proxmox.Client) tunnel.CommandHandler {
 	return func(action string, payload map[string]interface{}) (interface{}, error) {
 		switch action {
 		case "request_config_backup":
@@ -47,6 +50,23 @@ func buildCommandHandler() tunnel.CommandHandler {
 			return res, nil
 		case "ping":
 			return map[string]string{"pong": "ok"}, nil
+		case "proxmox_start", "proxmox_shutdown", "proxmox_reboot":
+			if proxmoxClient == nil {
+				return nil, fmt.Errorf("Proxmox integration is not configured on this agent")
+			}
+			node, nodeOK := payload["node"].(string)
+			guestType, typeOK := payload["guest_type"].(string)
+			vmidRaw, vmidOK := payload["vmid"].(float64)
+			if !nodeOK || !typeOK || !vmidOK || math.IsNaN(vmidRaw) || math.IsInf(vmidRaw, 0) ||
+				vmidRaw < 100 || vmidRaw > 999999999 || vmidRaw != math.Trunc(vmidRaw) {
+				return nil, fmt.Errorf("node, guest_type, and integer vmid are required")
+			}
+			op := strings.TrimPrefix(action, "proxmox_")
+			upid, err := proxmoxClient.GuestAction(node, guestType, int(vmidRaw), op)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]string{"task_id": upid}, nil
 		default:
 			return nil, fmt.Errorf("unsupported action %q", action)
 		}
@@ -81,7 +101,11 @@ func main() {
 	log.Printf("[Init] Client Group: %s", clientGroup)
 	log.Printf("[Init] Push Cadence: Every %d seconds", intervalSec)
 
-	collector := telemetry.NewCollector()
+	proxmoxClient, err := proxmox.NewFromEnv()
+	if err != nil {
+		log.Printf("[Proxmox] Remote actions disabled: %v", err)
+	}
+	collector := telemetry.NewCollector(proxmoxClient)
 
 	cfg := tunnel.Config{
 		HubURL:         hubURL,
@@ -89,7 +113,7 @@ func main() {
 		AuthToken:      authToken,
 		ClientGroup:    clientGroup,
 		PushInterval:   time.Duration(intervalSec) * time.Second,
-		CommandHandler: buildCommandHandler(),
+		CommandHandler: buildCommandHandler(proxmoxClient),
 	}
 
 	client := tunnel.NewClient(cfg, collector)

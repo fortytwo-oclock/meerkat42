@@ -1,6 +1,10 @@
 package telemetry
 
-import "time"
+import (
+	"time"
+
+	"control-plane/pkg/proxmox"
+)
 
 // NodeTelemetry represents the 10-second outbound payload sent by the Edge Agent.
 type NodeTelemetry struct {
@@ -14,6 +18,7 @@ type NodeTelemetry struct {
 	ZFS         []ZFSPoolHealth    `json:"zfs,omitempty"`
 	Containers  []ContainerSummary `json:"containers,omitempty"`
 	Disks       []DiskSMART        `json:"disks,omitempty"`
+	Proxmox     []proxmox.Guest    `json:"proxmox_guests,omitempty"`
 	AgentVer    string             `json:"agent_version"`
 }
 

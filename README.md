@@ -126,6 +126,11 @@ replicas, so WebSocket session affinity is not required. See
   bounded result storage, actor-attributed audit events, cancel/approve APIs, and
   optional two-person approval for destructive actions. The first exposed action
   is a safe agent ping; later integrations extend the same policy boundary.
+- **Phase 9 — Proxmox guest control:** ✅ agent-local, TLS-verified Proxmox API
+  integration with VM/LXC inventory and start/shutdown/reboot actions. API-token
+  credentials never leave the edge, every VMID must be agent-allowlisted, guest
+  identity is rechecked against live inventory, and shutdown/reboot use Phase 8's
+  optional two-owner approval path.
 
 ## Verification
 

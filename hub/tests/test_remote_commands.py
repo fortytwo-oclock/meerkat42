@@ -106,3 +106,13 @@ class RemotePolicyTest(unittest.TestCase):
             validate_command("shell", {"command": "whoami"})
         with self.assertRaises(CommandPolicyError):
             validate_command("ping", {"surprise": True})
+
+    def test_proxmox_actions_have_strict_schema_and_risk(self) -> None:
+        payload = {"node": "pve-a", "guest_type": "lxc", "vmid": 101}
+        start, normalized = validate_command("proxmox_start", payload)
+        reboot, _ = validate_command("proxmox_reboot", payload)
+        self.assertFalse(start.destructive)
+        self.assertTrue(reboot.destructive)
+        self.assertEqual(normalized, payload)
+        with self.assertRaises(CommandPolicyError):
+            validate_command("proxmox_shutdown", {**payload, "force": True})

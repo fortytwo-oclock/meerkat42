@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"control-plane/pkg/proxmox"
 )
 
 // Collector pulls system, storage, and container metrics from host mounts.
@@ -24,6 +27,7 @@ type Collector struct {
 	mu           sync.Mutex
 	lastCPU      cpuSnapshot
 	imageUpdates *imageUpdateChecker
+	proxmox      *proxmox.Client
 }
 
 type cpuSnapshot struct {
@@ -32,7 +36,7 @@ type cpuSnapshot struct {
 }
 
 // NewCollector initializes a collector with host-path awareness.
-func NewCollector() *Collector {
+func NewCollector(proxmoxClients ...*proxmox.Client) *Collector {
 	proc := "/proc"
 	if _, err := os.Stat("/host/proc"); err == nil {
 		proc = "/host/proc"
@@ -43,11 +47,22 @@ func NewCollector() *Collector {
 	}
 	dockerSock := "/var/run/docker.sock"
 
+	var proxmoxClient *proxmox.Client
+	if len(proxmoxClients) > 0 {
+		proxmoxClient = proxmoxClients[0]
+	} else {
+		var err error
+		proxmoxClient, err = proxmox.NewFromEnv()
+		if err != nil {
+			log.Printf("[Proxmox] Integration disabled: %v", err)
+		}
+	}
 	return &Collector{
 		procPath:     proc,
 		sysPath:      sys,
 		dockerSock:   dockerSock,
 		imageUpdates: newImageUpdateCheckerFromEnv(),
+		proxmox:      proxmoxClient,
 	}
 }
 
@@ -59,6 +74,14 @@ func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
 	containers := c.getDockerContainers()
 	zfsPools := c.getZFSPools()
 	disks := c.getSMARTDisks()
+	var guests []proxmox.Guest
+	if c.proxmox != nil {
+		var err error
+		guests, err = c.proxmox.Guests()
+		if err != nil {
+			log.Printf("[Proxmox] Inventory unavailable: %v", err)
+		}
+	}
 
 	kernel := c.readFirstLine(filepath.Join(c.procPath, "version"))
 	if len(kernel) > 80 {
@@ -76,6 +99,7 @@ func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
 		ZFS:         zfsPools,
 		Containers:  containers,
 		Disks:       disks,
+		Proxmox:     guests,
 		AgentVer:    "1.0.0-open-core",
 	}, nil
 }

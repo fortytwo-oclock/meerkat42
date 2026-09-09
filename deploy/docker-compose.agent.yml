@@ -23,6 +23,13 @@ services:
       # The hub never receives this key; keep it wherever you keep your DR secrets.
       # - VAULT_KEY=CHANGE_ME_base64_32_bytes
       # - VAULT_PATHS=/host/compose:/host/stacks
+      # Optional Proxmox VE API. TLS verification is mandatory; mount the
+      # cluster CA and grant this token only the VM privileges it needs.
+      # - PROXMOX_API_URL=https://pve.example.com:8006
+      # - PROXMOX_TOKEN_ID=control-plane@pve!agent
+      # - PROXMOX_TOKEN_SECRET=replace-me
+      # - PROXMOX_CA_FILE=/run/secrets/proxmox-ca.pem
+      # - PROXMOX_GUEST_ALLOWLIST=100,101,205
     volumes:
       # Read-only Docker socket for container lifecycle & crash-loop monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro

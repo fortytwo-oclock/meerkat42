@@ -73,6 +73,24 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   if (!node) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
 
   const t = node.latest_telemetry ?? {};
+  const runProxmoxAction = async (action: string, guest: any) => {
+    setCommandMsg(null);
+    try {
+      const created = await api.createCommand(id, action, {
+        node: guest.node,
+        guest_type: guest.type,
+        vmid: guest.vmid,
+      });
+      setCommandMsg(
+        created.status === "AWAITING_APPROVAL"
+          ? `${action.replace("proxmox_", "")} awaits a second owner's approval.`
+          : `${action.replace("proxmox_", "")} queued for ${guest.name || guest.vmid}.`,
+      );
+      await loadCommands();
+    } catch (e: any) {
+      setCommandMsg(e.message);
+    }
+  };
   const chartData = (cpu?.points ?? []).map((p, i) => ({
     ts: new Date(p.ts).toLocaleTimeString(),
     cpu: p.value,
@@ -286,6 +304,23 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
                   </span>
                   <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     {command.error ?? (command.attempts ? `${command.attempts} attempt(s)` : "waiting")}
+                    {command.status === "AWAITING_APPROVAL" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await api.approveCommand(command.id);
+                            setCommandMsg("Command approved and queued.");
+                            await loadCommands();
+                          } catch (e: any) {
+                            setCommandMsg(e.message);
+                          }
+                        }}
+                      >
+                        Approve
+                      </Button>
+                    )}
                     <Badge
                       variant={
                         command.status === "SUCCEEDED"
@@ -302,6 +337,39 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
               ))}
               <p className="text-xs text-muted-foreground">
                 Commands are tenant-scoped, policy checked, idempotent, and fully audited.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {(t.proxmox_guests ?? []).length > 0 && (
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Proxmox guests ({t.proxmox_guests.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {t.proxmox_guests.map((guest: any) => (
+                <div key={`${guest.node}-${guest.type}-${guest.vmid}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 text-sm">
+                  <span>
+                    {guest.name || `Guest ${guest.vmid}`} · {guest.type.toUpperCase()} {guest.vmid} · {guest.node}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Badge variant={guest.status === "running" ? "success" : "secondary"}>
+                      {guest.status}
+                    </Badge>
+                    {guest.status !== "running" ? (
+                      <Button size="sm" variant="outline" onClick={() => runProxmoxAction("proxmox_start", guest)}>Start</Button>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => runProxmoxAction("proxmox_reboot", guest)}>Reboot</Button>
+                        <Button size="sm" variant="outline" onClick={() => runProxmoxAction("proxmox_shutdown", guest)}>Shutdown</Button>
+                      </>
+                    )}
+                  </span>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Lifecycle actions are restricted by the agent-local guest allowlist. Proxmox credentials never leave the node.
               </p>
             </CardContent>
           </Card>

@@ -289,6 +289,8 @@ export const api = {
     }),
   cancelCommand: (id: string) =>
     j<RemoteCommand>(`/api/v1/commands/${id}/cancel`, { method: "POST" }),
+  approveCommand: (id: string) =>
+    j<RemoteCommand>(`/api/v1/commands/${id}/approve`, { method: "POST" }),
 
   billingSubscription: () =>
     j<BillingSubscription>(`/api/v1/billing/subscription`),
