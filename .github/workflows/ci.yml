@@ -47,6 +47,18 @@ jobs:
       - run: python -m alembic downgrade base
       - run: python -m alembic upgrade head
       - run: python -m unittest discover -s hub/tests -v
+      - name: Prove SQLite backup restoration
+        run: |
+          python scripts/hub_backup.py --output-dir /tmp/hub-backups
+          python scripts/verify_hub_restore.py /tmp/hub-backups/*.sqlite3
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v4
 
   frontend:
     name: Frontend

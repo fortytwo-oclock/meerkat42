@@ -25,3 +25,14 @@ keys and pub/sub channels are internal coordination data.
 The included Redis container is intentionally ephemeral because durable state
 lives in PostgreSQL. A managed Redis service should provide authentication and
 TLS; set `REDIS_URL` accordingly.
+
+Health probes use `/api/v1/ready`, which verifies the database and configured
+Redis backplane; `/api/v1/live` is process-only. Prometheus-compatible tenant
+metrics are owner-gated at `/api/v1/ops/metrics`.
+
+Production state recovery, retention targets, off-account copy requirements,
+and quarterly restore drills are documented in
+[`docs/disaster-recovery.md`](../docs/disaster-recovery.md). The backup command
+creates an atomic dump and SHA-256 manifest; the verification command restores
+into an isolated SQLite database or an explicitly named PostgreSQL
+`*_restore_drill` database.

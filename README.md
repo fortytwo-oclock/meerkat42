@@ -136,6 +136,10 @@ replicas, so WebSocket session affinity is not required. See
   enter telemetry or command results. Pulls require an allowlisted registry and
   an exact image reference already used by a running container. The workflow
   intentionally stages the image without silently recreating workloads.
+- **Phase 11 — Production readiness:** ✅ dependency review, database/Redis
+  readiness probes, owner-gated Prometheus metrics, atomic SQLite/PostgreSQL
+  backup tooling with SHA-256 manifests, isolated restore verification in CI,
+  and an RPO/RTO-based disaster-recovery runbook and drill schedule.
 
 ## Verification
 

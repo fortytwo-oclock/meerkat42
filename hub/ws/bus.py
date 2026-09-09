@@ -89,6 +89,15 @@ class EventBus:
     def unsubscribe(self, queue: asyncio.Queue) -> None:
         self._subscribers.discard(queue)
 
+    async def backend_ready(self) -> bool:
+        """The embedded bus is always ready; Redis mode must answer a ping."""
+        if self._redis is None:
+            return True
+        try:
+            return bool(await self._redis.ping())
+        except Exception:
+            return False
+
     def _publish_local(self, event: dict[str, Any]) -> None:
         for queue in list(self._subscribers):
             with contextlib.suppress(asyncio.QueueFull):
