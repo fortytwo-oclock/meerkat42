@@ -15,6 +15,7 @@ SCALAR_METRICS: tuple[str, ...] = (
     "containers_total",
     "containers_running",
     "crash_loop_count",
+    "container_updates_available",
     "zfs_pools_count",
     "zfs_degraded_count",
 )
@@ -41,6 +42,7 @@ def extract_scalars(telemetry: dict) -> dict[str, float]:
     zfs = telemetry.get("zfs") or []
     running = sum(1 for c in containers if c.get("state") == "running")
     crash = sum(1 for c in containers if c.get("is_crash_loop"))
+    updates = sum(1 for c in containers if c.get("update_available"))
     degraded = sum(1 for p in zfs if p.get("state") not in (None, "ONLINE"))
     return {
         "cpu_usage_pct": float(host.get("cpu_usage_pct", 0) or 0),
@@ -52,6 +54,7 @@ def extract_scalars(telemetry: dict) -> dict[str, float]:
         "containers_total": float(len(containers)),
         "containers_running": float(running),
         "crash_loop_count": float(crash),
+        "container_updates_available": float(updates),
         "zfs_pools_count": float(len(zfs)),
         "zfs_degraded_count": float(degraded),
     }

@@ -25,6 +25,11 @@ licensing, self-hosted or cloud.
 | `frontend/` | Next.js + Tailwind + shadcn dashboard — see [frontend/README.md](frontend/README.md) |
 | `deploy/` | Dockerfiles + compose (zero inbound ports for agents) |
 
+The agent can optionally ask the local Docker Engine for each tag's current
+registry distribution digest and flag containers whose running manifest differs.
+Set `IMAGE_UPDATE_CHECK_ENABLED=true`; checks are registry-allowlisted, cached,
+and limited to one stale image per telemetry cycle.
+
 ## Quickstart (self-hosted)
 
 ```bash
@@ -49,8 +54,9 @@ cd frontend && npm install && npm run dev                              # :3000
 ## Managed-cloud baseline
 
 `deploy/docker-compose.cloud.yml` provides a production-shaped single-host
-deployment with PostgreSQL, an internal database network, the Hub and dashboard,
-and Caddy for automatic TLS plus same-origin REST/WebSocket routing.
+deployment with PostgreSQL, Redis, two Hub replicas, a dedicated background
+worker, the dashboard, and Caddy for automatic TLS plus same-origin
+REST/WebSocket routing.
 
 ```bash
 cp deploy/cloud.env.example deploy/cloud.env
@@ -59,9 +65,9 @@ docker compose --env-file deploy/cloud.env \
   -f deploy/docker-compose.cloud.yml up -d --build
 ```
 
-Keep the Hub at one replica for now: live agent connections and command routing
-still use an in-memory registry. Horizontal Hub scaling requires a distributed
-connection/command backplane and is deliberately not implied by this manifest.
+Redis maintains expiring agent ownership leases and routes commands/events across
+replicas, so WebSocket session affinity is not required. See
+[deploy/README.md](deploy/README.md) for multi-host guidance.
 
 ## Editions
 
@@ -107,6 +113,10 @@ connection/command backplane and is deliberately not implied by this manifest.
   expiring agent ownership leases, cross-replica reverse-tunnel commands, and UI
   event fan-out; the cloud stack runs migrations/seeding once, starts two Hub
   replicas, and isolates background jobs in one worker to prevent duplicate sends.
+- **Phase 6 — Image update intelligence:** ✅ opt-in Docker Engine distribution
+  digest checks, immutable digest-pin handling, registry allowlisting, bounded
+  refresh work, cached failure retries, fleet/node badges, and an alert-rule
+  metric. Authenticated private registries remain an explicit future extension.
 
 ## Verification
 

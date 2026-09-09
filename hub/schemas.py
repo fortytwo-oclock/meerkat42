@@ -58,5 +58,6 @@ class NodeSummary(BaseModel):
     containers_total: int
     containers_running: int
     crash_loop_count: int
+    container_updates_available: int
     zfs_pools_count: int
     zfs_degraded_count: int

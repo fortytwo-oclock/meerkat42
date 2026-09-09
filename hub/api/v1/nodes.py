@@ -31,6 +31,7 @@ def _summary(node, group_slug: str) -> dict:
         "containers_total": int(s["containers_total"]),
         "containers_running": int(s["containers_running"]),
         "crash_loop_count": int(s["crash_loop_count"]),
+        "container_updates_available": int(s["container_updates_available"]),
         "zfs_pools_count": int(s["zfs_pools_count"]),
         "zfs_degraded_count": int(s["zfs_degraded_count"]),
     }

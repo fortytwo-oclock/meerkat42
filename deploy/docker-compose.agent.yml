@@ -12,6 +12,11 @@ services:
       - AUTH_TOKEN=agent_secret_token_change_me
       - CLIENT_GROUP=Client-Apex
       - PUSH_INTERVAL_SEC=10
+      # Optional registry digest checks through the Docker Engine API. Checks are
+      # cached and only one stale image is refreshed per telemetry cycle.
+      # - IMAGE_UPDATE_CHECK_ENABLED=true
+      # - IMAGE_UPDATE_CHECK_INTERVAL_SEC=21600
+      # - IMAGE_UPDATE_REGISTRIES=docker.io,registry-1.docker.io,ghcr.io,quay.io
       # Infrastructure Vault (Phase 4, enterprise). 32-byte AES-256 key, base64:
       #   openssl rand -base64 32
       # The hub never receives this key; keep it wherever you keep your DR secrets.

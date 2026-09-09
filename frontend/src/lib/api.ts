@@ -13,6 +13,7 @@ export interface NodeSummary {
   containers_total: number;
   containers_running: number;
   crash_loop_count: number;
+  container_updates_available: number;
   zfs_pools_count: number;
   zfs_degraded_count: number;
 }

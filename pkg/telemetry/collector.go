@@ -18,11 +18,12 @@ import (
 
 // Collector pulls system, storage, and container metrics from host mounts.
 type Collector struct {
-	procPath   string
-	sysPath    string
-	dockerSock string
-	mu         sync.Mutex
-	lastCPU    cpuSnapshot
+	procPath     string
+	sysPath      string
+	dockerSock   string
+	mu           sync.Mutex
+	lastCPU      cpuSnapshot
+	imageUpdates *imageUpdateChecker
 }
 
 type cpuSnapshot struct {
@@ -43,9 +44,10 @@ func NewCollector() *Collector {
 	dockerSock := "/var/run/docker.sock"
 
 	return &Collector{
-		procPath:   proc,
-		sysPath:    sys,
-		dockerSock: dockerSock,
+		procPath:     proc,
+		sysPath:      sys,
+		dockerSock:   dockerSock,
+		imageUpdates: newImageUpdateCheckerFromEnv(),
 	}
 }
 
@@ -218,12 +220,16 @@ func (c *Collector) getDockerContainers() []ContainerSummary {
 	}
 
 	type dockerInspectItem struct {
-		ID      string   `json:"Id"`
-		Names   []string `json:"Names"`
-		Image   string   `json:"Image"`
-		State   string   `json:"State"`
-		Status  string   `json:"Status"`
-		Created int64    `json:"Created"`
+		ID                      string   `json:"Id"`
+		Names                   []string `json:"Names"`
+		Image                   string   `json:"Image"`
+		State                   string   `json:"State"`
+		Status                  string   `json:"Status"`
+		Created                 int64    `json:"Created"`
+		ImageID                 string   `json:"ImageID"`
+		ImageManifestDescriptor struct {
+			Digest string `json:"digest"`
+		} `json:"ImageManifestDescriptor"`
 	}
 
 	var raw []dockerInspectItem
@@ -232,6 +238,7 @@ func (c *Collector) getDockerContainers() []ContainerSummary {
 	}
 
 	var summaries []ContainerSummary
+	checkBudget := 1
 	for _, item := range raw {
 		name := "unknown"
 		if len(item.Names) > 0 {
@@ -244,14 +251,29 @@ func (c *Collector) getDockerContainers() []ContainerSummary {
 		isCrashLoop := strings.Contains(strings.ToLower(item.Status), "restarting") ||
 			(item.State == "restarting")
 
+		update, checked := c.imageUpdates.check(
+			client,
+			item.Image,
+			item.ImageID,
+			item.ImageManifestDescriptor.Digest,
+			checkBudget > 0,
+		)
+		if checked {
+			checkBudget--
+		}
 		summaries = append(summaries, ContainerSummary{
-			ID:          id,
-			Name:        name,
-			Image:       item.Image,
-			State:       item.State,
-			Status:      item.Status,
-			IsCrashLoop: isCrashLoop,
-			Created:     time.Unix(item.Created, 0),
+			ID:                id,
+			Name:              name,
+			Image:             item.Image,
+			State:             item.State,
+			Status:            item.Status,
+			IsCrashLoop:       isCrashLoop,
+			Created:           time.Unix(item.Created, 0),
+			ImageDigest:       update.localDigest,
+			LatestImageDigest: update.remoteDigest,
+			UpdateAvailable:   update.available,
+			UpdateCheckStatus: update.status,
+			UpdateCheckedAt:   update.checkedAt,
 		})
 	}
 

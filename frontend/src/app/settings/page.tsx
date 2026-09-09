@@ -511,7 +511,7 @@ function NewRuleForm({ onCreate }: { onCreate: (b: Record<string, unknown>) => v
         value={metric}
         onChange={(e) => setMetric(e.target.value)}
       >
-        {["cpu_usage_pct", "ram_usage_pct", "load_1"].map((m) => (
+        {["cpu_usage_pct", "ram_usage_pct", "load_1", "container_updates_available"].map((m) => (
           <option key={m}>{m}</option>
         ))}
       </select>

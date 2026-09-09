@@ -44,14 +44,19 @@ type ZFSPoolHealth struct {
 
 // ContainerSummary captures docker container status, health, and restart churn.
 type ContainerSummary struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Image        string    `json:"image"`
-	State        string    `json:"state"`  // running, exited, restarting
-	Status       string    `json:"status"` // e.g. "Up 4 days", "Restarting (1) 20 secs ago"
-	RestartCount int       `json:"restart_count"`
-	IsCrashLoop  bool      `json:"is_crash_loop"`
-	Created      time.Time `json:"created"`
+	ID                string     `json:"id"`
+	Name              string     `json:"name"`
+	Image             string     `json:"image"`
+	State             string     `json:"state"`  // running, exited, restarting
+	Status            string     `json:"status"` // e.g. "Up 4 days", "Restarting (1) 20 secs ago"
+	RestartCount      int        `json:"restart_count"`
+	IsCrashLoop       bool       `json:"is_crash_loop"`
+	Created           time.Time  `json:"created"`
+	ImageDigest       string     `json:"image_digest,omitempty"`
+	LatestImageDigest string     `json:"latest_image_digest,omitempty"`
+	UpdateAvailable   bool       `json:"update_available"`
+	UpdateCheckStatus string     `json:"update_check_status,omitempty"`
+	UpdateCheckedAt   *time.Time `json:"update_checked_at,omitempty"`
 }
 
 // DiskSMART represents storage drive forensic summary.

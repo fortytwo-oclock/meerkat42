@@ -125,13 +125,24 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
               <div key={c.id ?? c.name} className="rounded-md border p-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{c.name}</span>
-                  <Badge variant={c.is_crash_loop ? "destructive" : "secondary"}>
-                    {c.state}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    {c.update_available && <Badge variant="warning">update available</Badge>}
+                    <Badge variant={c.is_crash_loop ? "destructive" : "secondary"}>
+                      {c.state}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {c.image} · {c.status} · restarts {c.restart_count ?? 0}
                 </div>
+                {c.update_check_status && c.update_check_status !== "DISABLED" && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    image check: {String(c.update_check_status).toLowerCase().replaceAll("_", " ")}
+                    {c.update_checked_at
+                      ? ` · ${new Date(c.update_checked_at).toLocaleString()}`
+                      : ""}
+                  </div>
+                )}
               </div>
             ))}
             {(t.containers ?? []).length === 0 && (

@@ -99,6 +99,11 @@ export function FleetMatrix({ group }: { group?: string }) {
                     {n.crash_loop_count > 0 && (
                       <Badge variant="destructive">{n.crash_loop_count} crash-loop</Badge>
                     )}
+                    {n.container_updates_available > 0 && (
+                      <Badge variant="warning">
+                        {n.container_updates_available} image update
+                      </Badge>
+                    )}
                     <Badge variant={n.zfs_degraded_count > 0 ? "destructive" : "secondary"}>
                       zfs {n.zfs_pools_count}
                       {n.zfs_degraded_count > 0 ? ` · ${n.zfs_degraded_count} degraded` : ""}
