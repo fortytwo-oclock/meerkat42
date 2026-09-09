@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { api, type BackupMeta, type MetricSeries } from "@/lib/api";
+import { api, type BackupMeta, type MetricSeries, type RemoteCommand } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 export default function NodeDetailPage({ params }: { params: { id: string } }) {
@@ -24,6 +24,8 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   const [range, setRange] = useState(6);
   const [backups, setBackups] = useState<BackupMeta[] | null>(null);
   const [vaultMsg, setVaultMsg] = useState<string | null>(null);
+  const [commands, setCommands] = useState<RemoteCommand[] | null>(null);
+  const [commandMsg, setCommandMsg] = useState<string | null>(null);
 
   const loadBackups = async () => {
     try {
@@ -35,6 +37,20 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   };
   useEffect(() => {
     loadBackups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const loadCommands = async () => {
+    try {
+      setCommands((await api.commands(id)).commands);
+    } catch {
+      setCommands(null);
+    }
+  };
+  useEffect(() => {
+    loadCommands();
+    const timer = setInterval(loadCommands, 5000);
+    return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -232,6 +248,60 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
               <p className="text-xs text-muted-foreground">
                 Ciphertext only — decrypt locally with{" "}
                 <code>scripts/vault_decrypt.py</code>.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {commands !== null && (
+          <Card className="md:col-span-2">
+            <CardHeader className="flex-row items-center justify-between">
+              <CardTitle>Remote actions</CardTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  setCommandMsg(null);
+                  try {
+                    await api.createCommand(id, "ping");
+                    setCommandMsg("Ping queued in the audited command ledger.");
+                    await loadCommands();
+                  } catch (e: any) {
+                    setCommandMsg(e.message);
+                  }
+                }}
+              >
+                Ping agent
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {commandMsg && <p className="text-xs text-muted-foreground">{commandMsg}</p>}
+              {commands.length === 0 && (
+                <p className="text-sm text-muted-foreground">No remote actions recorded.</p>
+              )}
+              {commands.map((command) => (
+                <div key={command.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <span>
+                    {command.action} · {new Date(command.created_at).toLocaleString()} · {command.requested_by}
+                  </span>
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {command.error ?? (command.attempts ? `${command.attempts} attempt(s)` : "waiting")}
+                    <Badge
+                      variant={
+                        command.status === "SUCCEEDED"
+                          ? "success"
+                          : ["FAILED", "TIMED_OUT"].includes(command.status)
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {command.status.replaceAll("_", " ")}
+                    </Badge>
+                  </span>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Commands are tenant-scoped, policy checked, idempotent, and fully audited.
               </p>
             </CardContent>
           </Card>

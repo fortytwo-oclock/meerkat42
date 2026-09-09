@@ -9,6 +9,7 @@ import signal
 from hub.billing.delivery import delivery_loop
 from hub.config import get_settings
 from hub.notify.dispatcher import dispatch_loop
+from hub.remote.dispatcher import command_loop
 from hub.services.liveness import rollup_loop, watchdog_loop
 from hub.timeseries import SqlMetricStore
 from hub.ws.bus import bus
@@ -38,6 +39,7 @@ async def run() -> None:
         asyncio.create_task(rollup_loop(SqlMetricStore(), stop)),
         asyncio.create_task(dispatch_loop(stop)),
         asyncio.create_task(delivery_loop(stop)),
+        asyncio.create_task(command_loop(stop)),
     ]
     log.info("background worker ready")
     try:

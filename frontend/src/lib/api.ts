@@ -118,6 +118,21 @@ export interface BackupMeta {
   completed_at: string | null;
 }
 
+export interface RemoteCommand {
+  id: string;
+  node_id: string;
+  action: string;
+  status: "AWAITING_APPROVAL" | "QUEUED" | "DISPATCHED" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "CANCELED";
+  requested_by: string;
+  destructive: boolean;
+  approval_required: boolean;
+  attempts: number;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface MetricSeries {
   node_id: string;
   metric: string;
@@ -261,6 +276,19 @@ export const api = {
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/backup`,
       { method: "POST" },
     ),
+
+  commands: (nodeId: string) =>
+    j<{ commands: RemoteCommand[] }>(
+      `/api/v1/nodes/${encodeURIComponent(nodeId)}/commands`,
+    ),
+  createCommand: (nodeId: string, action: string, payload: Record<string, unknown> = {}) =>
+    j<RemoteCommand>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/commands`, {
+      method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify({ action, payload }),
+    }),
+  cancelCommand: (id: string) =>
+    j<RemoteCommand>(`/api/v1/commands/${id}/cancel`, { method: "POST" }),
 
   billingSubscription: () =>
     j<BillingSubscription>(`/api/v1/billing/subscription`),

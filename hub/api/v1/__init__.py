@@ -6,6 +6,7 @@ from hub.api.v1 import (
     branding,
     billing,
     channels,
+    commands,
     groups,
     health,
     licenses,
@@ -25,6 +26,7 @@ api_router.include_router(nodes.router, tags=["nodes"])
 api_router.include_router(alerts.router, tags=["alerts"])
 api_router.include_router(agent_tokens.router, tags=["agent-tokens"])
 api_router.include_router(channels.router, tags=["channels"])
+api_router.include_router(commands.router, tags=["remote-commands"])
 api_router.include_router(tokens.router, tags=["tokens"])
 api_router.include_router(vault.router, tags=["vault"])
 api_router.include_router(metrics.router, tags=["metrics"])

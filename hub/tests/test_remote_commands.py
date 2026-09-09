@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import unittest
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from hub.db.base import Base
+from hub.models import ClientGroup, Node, Tenant
+from hub.remote.policy import CommandPolicyError, validate_command
+from hub.repositories import remote
+
+
+class RemoteCommandTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self.engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with self.engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        async with self.sessions() as session:
+            session.add(Tenant(id="tenant-a", slug="tenant-a", name="Tenant A"))
+            session.add(ClientGroup(id="group-a", tenant_id="tenant-a", slug="ops", name="Ops"))
+            session.add(Node(node_id="node-a", group_id="group-a", hostname="node-a"))
+            await session.commit()
+
+    async def asyncTearDown(self) -> None:
+        await self.engine.dispose()
+
+    async def test_dispatch_and_bounded_completion_are_audited(self) -> None:
+        async with self.sessions() as session:
+            row = await remote.create(
+                session, tenant_id="tenant-a", node_id="node-a", action="ping",
+                payload={}, requested_by="admin", destructive=False,
+                approval_required=False, idempotency_key="once",
+            )
+            await remote.mark_dispatched(session, row, timeout_seconds=60)
+            completed = await remote.complete(
+                session, tenant_id="tenant-a", node_id="node-a", command_id=row.id,
+                ok=True, result={"pong": True}, error=None, max_result_bytes=1024,
+            )
+            await session.commit()
+            self.assertEqual(completed.status, "SUCCEEDED")
+            self.assertEqual(completed.result, {"pong": True})
+            self.assertEqual(completed.attempts, 1)
+            self.assertEqual(len(await remote.list_audit(session, "tenant-a")), 3)
+
+    async def test_cross_node_result_and_duplicate_result_are_ignored(self) -> None:
+        async with self.sessions() as session:
+            row = await remote.create(
+                session, tenant_id="tenant-a", node_id="node-a", action="ping",
+                payload={}, requested_by="admin", destructive=False,
+                approval_required=False,
+            )
+            await remote.mark_dispatched(session, row, timeout_seconds=60)
+            wrong = await remote.complete(
+                session, tenant_id="tenant-a", node_id="other", command_id=row.id,
+                ok=True, result={}, error=None, max_result_bytes=1024,
+            )
+            self.assertIsNone(wrong)
+            first = await remote.complete(
+                session, tenant_id="tenant-a", node_id="node-a", command_id=row.id,
+                ok=True, result={}, error=None, max_result_bytes=1024,
+            )
+            duplicate = await remote.complete(
+                session, tenant_id="tenant-a", node_id="node-a", command_id=row.id,
+                ok=False, result={}, error="late", max_result_bytes=1024,
+            )
+            self.assertEqual(first.status, "SUCCEEDED")
+            self.assertIsNone(duplicate)
+
+    async def test_two_person_approval_requires_distinct_actor(self) -> None:
+        async with self.sessions() as session:
+            row = await remote.create(
+                session, tenant_id="tenant-a", node_id="node-a", action="future-danger",
+                payload={}, requested_by="owner-a", destructive=True,
+                approval_required=True,
+            )
+            with self.assertRaises(PermissionError):
+                await remote.approve(session, row, actor="owner-a", require_distinct_actor=True)
+            await remote.approve(session, row, actor="owner-b", require_distinct_actor=True)
+            self.assertEqual(row.status, "QUEUED")
+            self.assertEqual(row.approved_by, "owner-b")
+
+    async def test_oversized_result_fails_closed(self) -> None:
+        async with self.sessions() as session:
+            row = await remote.create(
+                session, tenant_id="tenant-a", node_id="node-a", action="ping",
+                payload={}, requested_by="admin", destructive=False,
+                approval_required=False,
+            )
+            await remote.mark_dispatched(session, row, timeout_seconds=60)
+            await remote.complete(
+                session, tenant_id="tenant-a", node_id="node-a", command_id=row.id,
+                ok=True, result={"data": "x" * 100}, error=None, max_result_bytes=10,
+            )
+            self.assertEqual(row.status, "FAILED")
+            self.assertIsNone(row.result)
+            self.assertIn("exceeded", row.error)
+
+
+class RemotePolicyTest(unittest.TestCase):
+    def test_only_allowlisted_schema_is_accepted(self) -> None:
+        policy, payload = validate_command("ping", {})
+        self.assertFalse(policy.destructive)
+        self.assertEqual(payload, {})
+        with self.assertRaises(CommandPolicyError):
+            validate_command("shell", {"command": "whoami"})
+        with self.assertRaises(CommandPolicyError):
+            validate_command("ping", {"surprise": True})

@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     vault_max_backup_bytes: int = 5 * 1024 * 1024  # reject oversized agent uploads
     vault_backup_timeout_seconds: int = 60
 
+    # --- Audited remote actions (Phase 8) ---------------------------
+    remote_commands_enabled: bool = True
+    remote_command_dispatch_interval_seconds: float = 1.0
+    remote_command_timeout_seconds: int = 60
+    remote_command_max_attempts: int = 5
+    remote_command_max_result_bytes: int = 64 * 1024
+    remote_command_two_person_approval: bool = False
+
     # --- Stripe billing / automated licenses (Phase 5) --------------
     stripe_webhook_secret: str = ""
     stripe_secret_key: str = ""

@@ -13,6 +13,7 @@ from hub.db.session import session_scope
 from hub.repositories import alerts as alerts_repo
 from hub.repositories import nodes as nodes_repo
 from hub.repositories import vault as vault_repo
+from hub.repositories import remote as remote_repo
 from hub.services import alerting
 from hub.timeseries.base import extract_scalars
 from hub.ws.bus import bus
@@ -148,16 +149,28 @@ async def agent_stream(websocket: WebSocket) -> None:
 
 
 async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> None:
-    """Persist an agent's response to a hub-issued command (currently: config backup)."""
+    """Persist a durable command response, with Vault legacy compatibility."""
     command_id = data.get("command_id")
     action = data.get("action")
     if not command_id:
+        return
+    settings = get_settings()
+    async with session_scope() as session:
+        command = await remote_repo.complete(
+            session, tenant_id=tenant_id, node_id=node_id, command_id=command_id,
+            ok=bool(data.get("ok", not data.get("error"))), result=data.get("result"),
+            error=data.get("error"), max_result_bytes=settings.remote_command_max_result_bytes,
+        )
+    if command is not None:
+        await bus.publish({
+            "type": "command.complete", "node_id": node_id,
+            "command_id": command_id, "status": command.status,
+        })
         return
     if action != "request_config_backup":
         log.info("node %s: unhandled command_result action %r", node_id, action)
         return
 
-    settings = get_settings()
     result = data.get("result") or {}
     files = result.get("files") or []
     total = sum(int(f.get("size", 0)) for f in files)

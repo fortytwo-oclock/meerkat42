@@ -121,6 +121,11 @@ replicas, so WebSocket session affinity is not required. See
   bound to one tenant and client group, one-time secret display, last-use audit,
   tenant-specific offline license enforcement, root tenant selection, and
   fail-closed cross-tenant node-ID collision handling.
+- **Phase 8 — Audited remote actions:** ✅ durable tenant-scoped command ledger,
+  policy allowlist, idempotency keys, offline-agent retries, response timeouts,
+  bounded result storage, actor-attributed audit events, cancel/approve APIs, and
+  optional two-person approval for destructive actions. The first exposed action
+  is a safe agent ping; later integrations extend the same policy boundary.
 
 ## Verification
 

@@ -144,9 +144,10 @@ class EventBus:
         payload: dict | None = None,
         *,
         tenant_id: str | None = None,
+        command_id: str | None = None,
     ) -> str | None:
         connection_id = f"{tenant_id}:{node_id}" if tenant_id else node_id
-        command_id = uuid.uuid4().hex
+        command_id = command_id or uuid.uuid4().hex
         frame = {
             "type": "command",
             "command_id": command_id,
@@ -231,5 +232,8 @@ async def send_command(
     payload: dict | None = None,
     *,
     tenant_id: str | None = None,
+    command_id: str | None = None,
 ) -> str | None:
-    return await bus.send_command(node_id, action, payload, tenant_id=tenant_id)
+    return await bus.send_command(
+        node_id, action, payload, tenant_id=tenant_id, command_id=command_id
+    )
