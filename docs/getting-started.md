@@ -92,7 +92,8 @@ Recreate the services and allow ports 3000 and 8080 only from the intended LAN
 in the host firewall. For internet or untrusted-network access, keep the
 services private behind a TLS reverse proxy, set the exact HTTPS dashboard
 origin, and use a `wss://` agent URL. Never expose an unencrypted Hub directly
-to the internet.
+to the internet. Follow [External dashboard access](external-access.md) for
+complete Pangolin, Caddy, and Nginx Proxy Manager instructions.
 
 ## Update
 

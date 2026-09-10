@@ -8,6 +8,10 @@ Choose the smallest topology that meets the job:
 | Raspberry Pi headend | Small fleet on a Pi 4/5 | [`docs/platform-support.md`](../docs/platform-support.md) |
 | PostgreSQL and Redis | Larger or hosted installation | `docker-compose.cloud.yml` below |
 
+To publish a self-hosted or Pi dashboard, follow the
+[external access guide](../docs/external-access.md). It includes Pangolin,
+Caddy, Nginx Proxy Manager, WebSocket routing, and firewall guidance.
+
 The Compose files build images from the checked-out source. Published release
 images can replace those builds later without changing the topology. Keep local
 environment files out of Git; every real template has an ignored counterpart.

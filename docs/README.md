@@ -8,6 +8,8 @@ Start with one document and follow links only when you need more depth.
    connect an agent, verify the deployment, update it, or remove it.
 2. [Platform support](platform-support.md) — Raspberry Pi, ARM, 32-bit agents,
    native binaries, and hardware acceptance checks.
+3. [External access](external-access.md) — publish the dashboard safely with
+   Pangolin, Caddy, Nginx Proxy Manager, or a private network.
 
 ## Operators
 

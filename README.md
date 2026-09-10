@@ -114,6 +114,7 @@ installation, container builds, and the hardware acceptance checklist.
 |---|---|
 | Install and connect the first node | [Getting started](docs/getting-started.md) |
 | Deploy on Raspberry Pi or ARM | [Platform support](docs/platform-support.md) |
+| Reach the dashboard from outside | [External access](docs/external-access.md) |
 | Back up and restore the Hub | [Disaster recovery](docs/disaster-recovery.md) |
 | Run complete acceptance testing | [Test environment](docs/test-environment.md) |
 | Review deployment topologies | [Deployment guide](deploy/README.md) |
