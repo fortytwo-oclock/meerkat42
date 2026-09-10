@@ -1,18 +1,77 @@
 # Meerkat42
 
-Meerkat42 watches Linux infrastructure from one dashboard. A small Go agent
-collects host, Docker, ZFS, SMART, and optional Proxmox telemetry, then opens an
-outbound WebSocket connection to the Hub. Remote sites do not need an inbound
-management port.
+**Every node. One watch.**
 
-The project includes a FastAPI Hub, a browser dashboard, SQLite for simple
-self-hosting, PostgreSQL/Redis for larger deployments, alert delivery, encrypted
-configuration backups, scoped access tokens, and governed remote actions.
+Meerkat42 is a self-hosted monitoring and operations platform for homelabs,
+small infrastructure teams, and managed service providers. It gives you one
+place to see Linux hosts, containers, storage, alerts, configuration backups,
+and approved remote actions.
 
-## Start here
+Each monitored machine runs a small agent that connects outward to the Hub.
+You do not need to open a management port at every remote site.
 
-You need Git, Docker Engine or Docker Desktop, Docker Compose v2, and Python 3.10
-or newer. On a fresh machine:
+## What it does
+
+- **Fleet monitoring** — CPU, memory, load, Docker containers, ZFS
+  pools, SMART disks, and optional Proxmox guests.
+- **Useful alerting** — stateful alerts with recovery notifications, flap
+  suppression, muting, and delivery through Discord, Slack, SMTP, or webhooks.
+- **Configuration recovery** — selected Compose and environment files are
+  encrypted on the agent before the Hub stores them.
+- **Governed operations** — allowlisted remote actions, durable command state,
+  actor attribution, optional two-owner approval, and time-limited emergency
+  diagnostics.
+- **Client separation** — owner, administrator, and scoped viewer roles for
+  operators managing more than one client or environment.
+- **Flexible deployment** — SQLite for a small self-hosted installation, or
+  PostgreSQL and Redis for larger and multi-replica deployments.
+
+## How it fits together
+
+```text
+ Remote Linux host                         Meerkat42 headend
+┌──────────────────┐    outbound WS/WSS   ┌────────────────────┐
+│ Meerkat42 Agent  │ ───────────────────▶ │ Hub API            │
+│                  │                      │                    │
+│ Linux + Docker   │ ◀─────────────────── │ policy + commands  │
+│ ZFS + SMART      │   approved actions   │ alerts + history   │
+│ optional Proxmox │                      └─────────┬──────────┘
+└──────────────────┘                                │
+                                      ┌─────────────┴──────────┐
+                                      │ Browser dashboard      │
+                                      └────────────────────────┘
+```
+
+Agents initiate the connection and reconnect automatically. The Hub stores
+telemetry and policy state. The dashboard talks to the Hub through a same-origin
+API proxy.
+
+## Technology
+
+| Area | What Meerkat42 uses |
+|---|---|
+| Edge agent | Go, static Linux binaries, WebSocket transport |
+| Hub | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
+| Dashboard | Next.js, React, TypeScript, Tailwind CSS |
+| Small-install storage | SQLite with time-series rollups and retention |
+| Larger-install storage | PostgreSQL plus optional Redis coordination |
+| Packaging | Docker, Docker Compose, multi-architecture BuildKit builds |
+| Security | Outbound-only agents, AES-256-GCM Vault backups, Ed25519 offline licenses, RBAC, TOTP grants |
+| Notifications | Discord, Slack, SMTP, and generic HTTPS webhooks |
+
+## Choose a deployment
+
+| If you are… | Start here |
+|---|---|
+| Trying Meerkat42 on one computer | [Self-hosted quickstart](#quickstart) |
+| Running the headend on a Raspberry Pi 4/5 | [Raspberry Pi guide](docs/platform-support.md#raspberry-pi-45-headend) |
+| Monitoring an older Pi or 32-bit machine | [Agent platform matrix](docs/platform-support.md#support-matrix) |
+| Building a larger production installation | [PostgreSQL and Redis deployment](deploy/README.md#cloud-deployment) |
+
+## Quickstart
+
+Install Git, Docker Engine or Docker Desktop, Docker Compose v2, and Python 3.10
+or newer. Then run:
 
 ```bash
 git clone https://github.com/fortytwo-oclock/meerkat42.git
@@ -22,72 +81,61 @@ docker compose --env-file deploy/self-host.env \
   -f deploy/docker-compose.hub.yml up -d --build
 ```
 
-Open <http://localhost:3000>. Go to **Settings**, copy `ADMIN_TOKEN` from
-`deploy/self-host.env` into **Operator token**, and save it. The Hub API and its
-interactive reference are available at <http://localhost:8080/docs>.
+Open <http://localhost:3000>. Under **Settings**, paste the `ADMIN_TOKEN` from
+`deploy/self-host.env` into **Operator token**. The interactive Hub API reference
+is available at <http://localhost:8080/docs>.
 
-Next, [connect your first monitored machine](docs/getting-started.md#connect-an-agent).
-The complete tutorial also covers verification, LAN/TLS access, updates,
-backups, troubleshooting, and removal.
+The default installation binds to localhost and stores its data in a Docker
+volume. It does not expose the Hub to the internet.
 
-## Raspberry Pi and ARM
+To connect a monitored machine, continue with
+[Connect an agent](docs/getting-started.md#connect-an-agent). The complete guide
+covers LAN access, TLS, verification, updates, troubleshooting, and removal.
 
-- A Raspberry Pi 4 with 4 GB or more, or a Pi 5, can run the complete headend
-  with a 64-bit OS and SSD-backed storage.
-- Pi 2, Pi Zero, and 32-bit systems can run the lightweight agent.
-- Native agent builds cover Linux amd64, 386, ARM64, ARMv7, and ARMv6.
+## Platform support
 
-See [Platform support and Raspberry Pi deployments](docs/platform-support.md)
-for the exact matrix and Pi-specific Compose instructions.
+The complete Hub and dashboard support Linux x86-64 and ARM64. A Raspberry Pi 4
+with at least 4 GB of RAM or a Pi 5 can run the headend with a 64-bit OS and
+SSD-backed storage.
+
+Native agents are built for:
+
+- Linux x86-64 and x86 32-bit
+- Linux ARM64
+- Linux ARMv7, including Pi 2 and 32-bit Pi 3/4 installations
+- Linux ARMv6, including Pi 1 and Pi Zero
+
+See [Platform support](docs/platform-support.md) for limitations, native
+installation, container builds, and the hardware acceptance checklist.
 
 ## Documentation
 
-| I want to… | Read |
+| Task | Guide |
 |---|---|
-| Install Meerkat42 and connect a node | [Getting started](docs/getting-started.md) |
-| Run it on Raspberry Pi or ARM | [Platform support](docs/platform-support.md) |
-| Validate a complete deployment | [Test environment](docs/test-environment.md) |
+| Install and connect the first node | [Getting started](docs/getting-started.md) |
+| Deploy on Raspberry Pi or ARM | [Platform support](docs/platform-support.md) |
 | Back up and restore the Hub | [Disaster recovery](docs/disaster-recovery.md) |
-| Understand production topologies | [Deployment guide](deploy/README.md) |
-| Work on the Hub or API | [Hub reference](hub/README.md) |
-| Work on the dashboard | [Frontend reference](frontend/README.md) |
+| Run complete acceptance testing | [Test environment](docs/test-environment.md) |
+| Review deployment topologies | [Deployment guide](deploy/README.md) |
+| Work with the API and Hub | [Hub reference](hub/README.md) |
+| Develop the dashboard | [Dashboard reference](frontend/README.md) |
 
-The [documentation index](docs/README.md) explains which guides are tutorials,
-operator runbooks, and developer references.
+The [documentation index](docs/README.md) separates operator tutorials,
+runbooks, and developer references.
 
-## Repository layout
+## Security notes
 
-| Path | Purpose |
-|---|---|
-| `cmd/agent`, `pkg/` | Go edge agent and agent-side integrations |
-| `hub/` | FastAPI API, persistence, alerting, licensing, and command routing |
-| `frontend/` | Next.js operator dashboard |
-| `deploy/` | Dockerfiles, Compose profiles, and environment templates |
-| `scripts/` | Setup, verification, backup, restore, and release utilities |
-| `docs/` | User tutorials and operator runbooks |
+The quickstart is private by default. Before allowing access from another
+network, put the Hub behind a TLS reverse proxy, restrict it with a firewall,
+set the exact dashboard origin, and use `wss://` for agents.
 
-## Security defaults
+The Docker socket is powerful even when mounted read-only. Run agents only on
+machines you administer, and enable optional device access, Vault paths, or
+Proxmox credentials only where they are required.
 
-- Agents connect outbound; the agent Compose file publishes no ports.
-- The quickstart binds the Hub and dashboard to loopback by default.
-- Setup generates independent owner and agent credentials and keeps them in an
-  ignored local file.
-- Infrastructure Vault encryption happens on the agent; the Hub stores
-  ciphertext and never receives the Vault key.
-- Emergency diagnostics are disabled by default and never provide an arbitrary
-  shell.
+## Project status
 
-Do not expose the Hub directly to the internet. Use TLS, a reverse proxy, a
-restricted firewall, and `wss://` agent URLs for any non-local deployment.
-
-## Development checks
-
-```bash
-go test ./cmd/... ./pkg/...
-go vet ./cmd/... ./pkg/...
-python -m unittest discover -s hub/tests -v
-cd frontend && npm ci && npm run build
-```
-
-CI also validates migrations, Compose profiles, restore tooling, dependency
-changes, and all supported agent architectures.
+Meerkat42 is under active development. The repository includes automated tests
+for the Go agent, Hub, database migrations, dashboard build, Compose profiles,
+restore workflow, and supported agent architectures. Hardware-specific features
+still need validation on the exact systems where they will run.
