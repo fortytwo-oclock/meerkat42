@@ -1,179 +1,141 @@
-# Distributed Control Plane
+# Meerkat42
 
-Open-core infrastructure monitoring and control plane for MSPs, boutique IT
-agencies, and homelabbers. Outbound-only edge agents, offline cryptographic
-licensing, self-hosted or cloud.
+**Every node. One watch.**
 
+Meerkat42 is a self-hosted monitoring and operations platform for homelabs,
+small infrastructure teams, and managed service providers. It gives you one
+place to see Linux hosts, containers, storage, alerts, configuration backups,
+and approved remote actions.
+
+Each monitored machine runs a small agent that connects outward to the Hub.
+You do not need to open a management port at every remote site.
+
+## What it does
+
+- **Fleet monitoring** — CPU, memory, load, Docker containers, ZFS
+  pools, SMART disks, and optional Proxmox guests.
+- **Useful alerting** — stateful alerts with recovery notifications, flap
+  suppression, muting, and delivery through Discord, Slack, SMTP, or webhooks.
+- **Configuration recovery** — selected Compose and environment files are
+  encrypted on the agent before the Hub stores them.
+- **Governed operations** — allowlisted remote actions, durable command state,
+  actor attribution, optional two-owner approval, and time-limited emergency
+  diagnostics.
+- **Client separation** — owner, administrator, and scoped viewer roles for
+  operators managing more than one client or environment.
+- **Flexible deployment** — SQLite for a small self-hosted installation, or
+  PostgreSQL and Redis for larger and multi-replica deployments.
+
+## How it fits together
+
+```text
+ Remote Linux host                         Meerkat42 headend
+┌──────────────────┐    outbound WS/WSS   ┌────────────────────┐
+│ Meerkat42 Agent  │ ───────────────────▶ │ Hub API            │
+│                  │                      │                    │
+│ Linux + Docker   │ ◀─────────────────── │ policy + commands  │
+│ ZFS + SMART      │   approved actions   │ alerts + history   │
+│ optional Proxmox │                      └─────────┬──────────┘
+└──────────────────┘                                │
+                                      ┌─────────────┴──────────┐
+                                      │ Browser dashboard      │
+                                      └────────────────────────┘
 ```
-┌────────────┐   wss:// (outbound only)   ┌──────────────┐      ┌─────────────┐
-│ Edge Agent │ ─────────────────────────▶ │  Control     │ ◀──▶ │  Dashboard  │
-│  (Go)      │   telemetry every 10s      │  Plane Hub   │  WS  │  (Next.js)  │
-│ /proc      │ ◀───────────────────────── │  (FastAPI)   │ REST │             │
-│ docker.sock│   HubCommand (reverse)     └──────┬───────┘      └─────────────┘
-│ ZFS / SMART│                                   │
-└────────────┘                          SQLite (self-host) / Postgres (cloud)
-                                        + time-series (raw → 1m → 5m rollups)
-```
 
-## Components
+Agents initiate the connection and reconnect automatically. The Hub stores
+telemetry and policy state. The dashboard talks to the Hub through a same-origin
+API proxy.
 
-| Path | What |
-|------|------|
-| `cmd/agent`, `pkg/telemetry`, `pkg/tunnel` | Go edge agent: `/proc` + Docker + ZFS auto-discovery, reconnecting outbound WebSocket |
-| `pkg/license`, `cmd/license-tool`, `scripts/license_tool.py` | Offline Ed25519 signed-JWT licensing (tamper-evident `max_nodes` / `tier` / `exp`) |
-| `hub/` | Control plane: WS ingestion, **persistence**, alert rules, **time-series retention**, multi-tenant REST API — see [hub/README.md](hub/README.md) |
-| `frontend/` | Next.js + Tailwind + shadcn dashboard — see [frontend/README.md](frontend/README.md) |
-| `deploy/` | Dockerfiles + compose (zero inbound ports for agents) |
+## Technology
 
-The agent can optionally ask the local Docker Engine for each tag's current
-registry distribution digest and flag containers whose running manifest differs.
-Set `IMAGE_UPDATE_CHECK_ENABLED=true`; checks are registry-allowlisted, cached,
-and limited to one stale image per telemetry cycle.
+| Area | What Meerkat42 uses |
+|---|---|
+| Edge agent | Go, static Linux binaries, WebSocket transport |
+| Hub | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2, Alembic |
+| Dashboard | Next.js, React, TypeScript, Tailwind CSS |
+| Small-install storage | SQLite with time-series rollups and retention |
+| Larger-install storage | PostgreSQL plus optional Redis coordination |
+| Packaging | Docker, Docker Compose, multi-architecture BuildKit builds |
+| Security | Outbound-only agents, AES-256-GCM Vault backups, Ed25519 offline licenses, RBAC, TOTP grants |
+| Notifications | Discord, Slack, SMTP, and generic HTTPS webhooks |
 
-## Quickstart (self-hosted)
+## Choose a deployment
+
+| If you are… | Start here |
+|---|---|
+| Trying Meerkat42 on one computer | [Self-hosted quickstart](#quickstart) |
+| Running the headend on a Raspberry Pi 4/5 | [Raspberry Pi guide](docs/platform-support.md#raspberry-pi-45-headend) |
+| Monitoring an older Pi or 32-bit machine | [Agent platform matrix](docs/platform-support.md#support-matrix) |
+| Building a larger production installation | [PostgreSQL and Redis deployment](deploy/README.md#cloud-deployment) |
+
+## Quickstart
+
+Install Git, Docker Engine or Docker Desktop, Docker Compose v2, and Python 3.10
+or newer. Then run:
 
 ```bash
-# Hub + dashboard (SQLite, zero external deps)
-docker compose -f deploy/docker-compose.hub.yml up --build
-#   hub   → http://localhost:8080  (/docs)
-#   dash  → http://localhost:3000
-
-# Point an agent at it
-NODE_ID=lab-01 CLIENT_GROUP="Internal Lab" \
-HUB_URL=ws://localhost:8080/api/v1/agent/stream \
-  go run ./cmd/agent
+git clone https://github.com/fortytwo-oclock/meerkat42.git
+cd meerkat42
+python scripts/bootstrap_self_host.py
+docker compose --env-file deploy/self-host.env \
+  -f deploy/docker-compose.hub.yml up -d --build
 ```
 
-Local dev without Docker:
+Open <http://localhost:3000>. Under **Settings**, paste the `ADMIN_TOKEN` from
+`deploy/self-host.env` into **Operator token**. The interactive Hub API reference
+is available at <http://localhost:8080/docs>.
 
-```bash
-pip install -r hub/requirements.txt && uvicorn hub.main:app --reload   # :8080
-cd frontend && npm install && npm run dev                              # :3000
-```
+The default installation binds to localhost and stores its data in a Docker
+volume. It does not expose the Hub to the internet.
 
-For a disposable full-stack acceptance environment, including PostgreSQL,
-Redis, a worker, dashboard, agent, Vault fixtures, TOTP diagnostics, and Mailpit,
-follow [`docs/test-environment.md`](docs/test-environment.md). A ready-to-paste
-Claude Code brief is in
-[`docs/claude-code-test-environment-prompt.md`](docs/claude-code-test-environment-prompt.md).
+To connect a monitored machine, continue with
+[Connect an agent](docs/getting-started.md#connect-an-agent). The complete guide
+covers LAN access, TLS, verification, updates, troubleshooting, and removal.
 
-Agent binaries are CI-built for Linux x86-64, x86 32-bit, ARM64, ARMv7, and
-ARMv6. The complete headend supports x86-64 and ARM64, including a lightweight
-Raspberry Pi 4/5 profile. See
-[`docs/platform-support.md`](docs/platform-support.md) for the exact matrix,
-cross-build commands, Pi setup, and hardware acceptance checklist.
+## Platform support
 
-## Managed-cloud baseline
+The complete Hub and dashboard support Linux x86-64 and ARM64. A Raspberry Pi 4
+with at least 4 GB of RAM or a Pi 5 can run the headend with a 64-bit OS and
+SSD-backed storage.
 
-`deploy/docker-compose.cloud.yml` provides a production-shaped single-host
-deployment with PostgreSQL, Redis, two Hub replicas, a dedicated background
-worker, the dashboard, and Caddy for automatic TLS plus same-origin
-REST/WebSocket routing.
+Native agents are built for:
 
-```bash
-cp deploy/cloud.env.example deploy/cloud.env
-# Replace every placeholder and point DOMAIN DNS at the host.
-docker compose --env-file deploy/cloud.env \
-  -f deploy/docker-compose.cloud.yml up -d --build
-```
+- Linux x86-64 and x86 32-bit
+- Linux ARM64
+- Linux ARMv7, including Pi 2 and 32-bit Pi 3/4 installations
+- Linux ARMv6, including Pi 1 and Pi Zero
 
-Redis maintains expiring agent ownership leases and routes commands/events across
-replicas, so WebSocket session affinity is not required. See
-[deploy/README.md](deploy/README.md) for multi-host guidance.
+See [Platform support](docs/platform-support.md) for limitations, native
+installation, container builds, and the hardware acceptance checklist.
 
-## Editions
+## Documentation
 
-| | Community (default) | Enterprise (offline license) | Hosted Cloud |
-|-|--|--|--|
-| Nodes | 3 | per-license (`-1` = unlimited) | per-plan |
-| DB | SQLite | SQLite or Postgres | Postgres (multi-tenant) |
-| Client grouping / white-label | – | ✓ (feature claims) | ✓ |
+| Task | Guide |
+|---|---|
+| Install and connect the first node | [Getting started](docs/getting-started.md) |
+| Deploy on Raspberry Pi or ARM | [Platform support](docs/platform-support.md) |
+| Back up and restore the Hub | [Disaster recovery](docs/disaster-recovery.md) |
+| Run complete acceptance testing | [Test environment](docs/test-environment.md) |
+| Review deployment topologies | [Deployment guide](deploy/README.md) |
+| Work with the API and Hub | [Hub reference](hub/README.md) |
+| Develop the dashboard | [Dashboard reference](frontend/README.md) |
 
-## Roadmap status
+The [documentation index](docs/README.md) separates operator tutorials,
+runbooks, and developer references.
 
-- **Phase 1 — Persistence & time-series:** ✅ SQLAlchemy 2.0 models (tenants,
-  client_groups, nodes, alert_rules, dispatched_alerts, license_records,
-  metric_points, metric_rollups); Alembic; `MetricStore` interface + relational
-  store with 10s/1m/5m downsampling and retention pruning; stateful alert events.
-- **Phase 2 — Dashboard:** ✅ scaffolded — Fleet Matrix, client-group filter, node
-  detail (containers / ZFS / SMART, history charts), license modal, live WS,
-  settings page (alert triggers + notification channels).
-- **Phase 3 — Alert dispatch:** ✅ Discord / Slack / SMTP / generic webhook
-  channels, `MetricStore`-style pluggable senders, FIRING + RESOLVED delivery,
-  flapping suppression + per-channel anti-spam throttle, mute, `/test`. Auth
-  (`AGENT_BOOTSTRAP_TOKEN`, `ADMIN_TOKEN`) added ahead of schedule.
-- **Phase 4 — Enterprise / MSP:** ✅
-  - **Infrastructure Vault:** hub issues `request_config_backup` down the tunnel;
-    the Go agent (`pkg/vault`) AES-256-GCM encrypts every `docker-compose.y*ml` /
-    `*.env` under `VAULT_KEY` (32-byte, base64) and streams ciphertext back. The
-    hub stores ciphertext only; restore offline with `scripts/vault_decrypt.py`.
-    Gated on the `vault_backup` license feature.
-  - **RBAC & client portals:** `api_tokens` table with `owner` / `admin` /
-    `viewer` roles; viewer tokens are scoped to one `client_group` and see only
-    that group's nodes/alerts. `ADMIN_TOKEN` acts as owner. Token CRUD at
-    `/api/v1/tokens` (owner only).
-  - **White-labeling:** `/api/v1/branding` serves `white_label_name` / `_logo` /
-    `_color` from the license claims; the dashboard shell applies them.
-- **Phase 5 — Billing automation + managed cloud:** ✅ Stripe subscription
-  webhooks are raw-body/HMAC verified, replay
-  bounded, idempotently recorded, and mapped by product to Ed25519 license
-  claims. Active/trialing subscriptions issue tenant-bound offline licenses;
-  subscription state and issued tokens are durable and owner-gated. Hosted
-  Checkout, Stripe Billing Portal sessions, dashboard license retrieval, and a
-  PostgreSQL+Caddy cloud deployment are included. Customer email delivery uses
-  a durable SMTP outbox with bounded retries. An optional Redis backplane adds
-  expiring agent ownership leases, cross-replica reverse-tunnel commands, and UI
-  event fan-out; the cloud stack runs migrations/seeding once, starts two Hub
-  replicas, and isolates background jobs in one worker to prevent duplicate sends.
-- **Phase 6 — Image update intelligence:** ✅ opt-in Docker Engine distribution
-  digest checks, immutable digest-pin handling, registry allowlisting, bounded
-  refresh work, cached failure retries, fleet/node badges, and an alert-rule
-  metric. Authenticated private registries remain an explicit future extension.
-- **Phase 7 — Tenant-safe enrollment:** ✅ expiring/revocable enrollment tokens
-  bound to one tenant and client group, one-time secret display, last-use audit,
-  tenant-specific offline license enforcement, root tenant selection, and
-  fail-closed cross-tenant node-ID collision handling.
-- **Phase 8 — Audited remote actions:** ✅ durable tenant-scoped command ledger,
-  policy allowlist, idempotency keys, offline-agent retries, response timeouts,
-  bounded result storage, actor-attributed audit events, cancel/approve APIs, and
-  optional two-person approval for destructive actions. The first exposed action
-  is a safe agent ping; later integrations extend the same policy boundary.
-- **Phase 9 — Proxmox guest control:** ✅ agent-local, TLS-verified Proxmox API
-  integration with VM/LXC inventory and start/shutdown/reboot actions. API-token
-  credentials never leave the edge, every VMID must be agent-allowlisted, guest
-  identity is rechecked against live inventory, and shutdown/reboot use Phase 8's
-  optional two-owner approval path.
-- **Phase 10 — Update management:** ✅ private-registry digest checks and image
-  pulls use an agent-local Docker config via `X-Registry-Auth`; credentials never
-  enter telemetry or command results. Pulls require an allowlisted registry and
-  an exact image reference already used by a running container. The workflow
-  intentionally stages the image without silently recreating workloads.
-- **Phase 11 — Production readiness:** ✅ dependency review, database/Redis
-  readiness probes, owner-gated Prometheus metrics, atomic SQLite/PostgreSQL
-  backup tooling with SHA-256 manifests, isolated restore verification in CI,
-  and an RPO/RTO-based disaster-recovery runbook and drill schedule.
-- **Phase 12 — Emergency diagnostics:** ✅ disabled-by-default break-glass
-  console over the outbound agent tunnel. Owner authentication plus a TOTP
-  creates a hashed, actor-bound grant lasting at most 15 minutes. Only six fixed
-  read-only diagnostics are available; there is no arbitrary shell, arguments,
-  or stdin. Execution is capped at 15 seconds and 48 KiB, results are owner-only,
-  and session/command activity is audited.
+## Security notes
 
-## Verification
+The quickstart is private by default. Before allowing access from another
+network, put the Hub behind a TLS reverse proxy, restrict it with a firewall,
+set the exact dashboard origin, and use `wss://` for agents.
 
-The repository CI workflow validates every component on each push and pull
-request: Go unit tests (including the Vault encryption and tunnel command-result
-paths), race detection, `go vet`, native and Linux amd64/386/arm64/armv7/armv6
-agent builds, the
-Alembic upgrade/check/downgrade/upgrade cycle, Hub API smoke tests, and the
-Next.js production build.
+The Docker socket is powerful even when mounted read-only. Run agents only on
+machines you administer, and enable optional device access, Vault paths, or
+Proxmox credentials only where they are required.
 
-Run the release checks locally with:
+## Project status
 
-```bash
-go test ./cmd/... ./pkg/...
-go vet ./cmd/... ./pkg/...
-go build ./cmd/... ./pkg/...
-python -m unittest discover -s hub/tests -v
-cd frontend && npm run build
-```
+Meerkat42 is under active development. The repository includes automated tests
+for the Go agent, Hub, database migrations, dashboard build, Compose profiles,
+restore workflow, and supported agent architectures. Hardware-specific features
+still need validation on the exact systems where they will run.

@@ -1,75 +1,41 @@
-version: '3.8'
-
 services:
-  control-plane-hub:
+  hub:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.hub
-    container_name: control-plane-hub
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HUB_PORT:-8080}:8080"
     environment:
-      - ED25519_PUBLIC_KEY=31iGBIN15cAlkXmYXYLwZTXJYR9Yngjzf187Bf+s+xA=
-      - LOG_LEVEL=info
-      # Shared secret every edge agent must present (must match the agent's AUTH_TOKEN).
-      - AGENT_BOOTSTRAP_TOKEN=agent_secret_token_change_me
-      # Required for mutating REST endpoints (license/groups/alert-rules/ack) and
-      # to act as an "owner" for token management. Leave unset only for a trusted
-      # single-operator LAN deployment with no issued API tokens.
-      - ADMIN_TOKEN=admin_token_change_me
-      # Allow the generic 'webhook' channel kind to hit http:// and LAN addresses
-      # (e.g. a self-hosted ntfy/gotify). discord/slack stay locked to public hosts.
-      # - WEBHOOK_ALLOW_INSECURE=true
-      # Self-hosted default: embedded SQLite. For cloud, point at Postgres:
-      # - DATABASE_URL=postgresql+asyncpg://hub:hub@postgres:5432/hub
-      - DATABASE_URL=sqlite+aiosqlite:////app/data/hub.db
-      - CORS_ORIGINS=http://localhost:3000
-      # Hosted billing service only (never ship the private key to customer hubs):
-      # - STRIPE_WEBHOOK_SECRET=whsec_...
-      # - LICENSE_SIGNING_PRIVATE_KEY=<base64 raw 32-byte Ed25519 private key>
-      # - STRIPE_PRODUCT_PLANS_JSON={"prod_enterprise":{"tier":"enterprise","max_nodes":100,"features":["*"]}}
-      # - BILLING_EMAIL_ENABLED=true
-      # - BILLING_EMAIL_FROM=licenses@example.com
-      # - BILLING_SMTP_HOST=smtp.example.com
-      # - BILLING_SMTP_USERNAME=...
-      # - BILLING_SMTP_PASSWORD=...
-      # Break-glass diagnostics: owner + TOTP, fixed read-only commands only.
-      # - EMERGENCY_CONSOLE_ENABLED=true
-      # - EMERGENCY_TOTP_SECRET=<base32 secret from your authenticator manager>
+      DATABASE_URL: sqlite+aiosqlite:////app/data/hub.db
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?run python scripts/bootstrap_self_host.py}
+      AGENT_BOOTSTRAP_TOKEN: ${AGENT_BOOTSTRAP_TOKEN:?run python scripts/bootstrap_self_host.py}
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:-31iGBIN15cAlkXmYXYLwZTXJYR9Yngjzf187Bf+s+xA=}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - hub-data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/ready"]
+      interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 12
+      start_period: 20s
 
   dashboard:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.frontend
-    container_name: control-plane-dashboard
+      args:
+        HUB_URL: http://hub:8080
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - HUB_URL=http://control-plane-hub:8080
-      # If the hub sets ADMIN_TOKEN, operators paste it into the dashboard
-      # (stored client-side); it is not baked into the image.
+      HUB_URL: http://hub:8080
     depends_on:
-      - control-plane-hub
-
-  # Uncomment for multi-tenant cloud mode.
-  # postgres:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     - POSTGRES_USER=hub
-  #     - POSTGRES_PASSWORD=hub
-  #     - POSTGRES_DB=hub
-  #   volumes:
-  #     - pg-data:/var/lib/postgresql/data
+      hub:
+        condition: service_healthy
 
 volumes:
   hub-data:
-  # pg-data:

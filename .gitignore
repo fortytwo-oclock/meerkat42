@@ -20,6 +20,8 @@ frontend/.next/
 /deploy/test-license.txt
 /deploy/test-totp-uri.txt
 /deploy/test-fixtures/
+/deploy/self-host.env
+/deploy/agent.env
 
 # Go
 /agent

@@ -1,50 +1,15 @@
-version: '3.8'
-
 services:
-  control-plane-agent:
-    image: ghcr.io/controlplane/edge-agent:latest
-    container_name: control-plane-agent
+  agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    image: meerkat42-agent:local
     restart: unless-stopped
-    # Outbound only: NO inbound ports exposed!
-    environment:
-      - HUB_URL=wss://hub.yourdomain.com/api/v1/agent/stream
-      - NODE_ID=proxmox-node-01
-      # Use the one-time cpa_... value created for this tenant/client group.
-      - AUTH_TOKEN=cpa_replace_with_enrollment_token
-      - CLIENT_GROUP=Client-Apex
-      - PUSH_INTERVAL_SEC=10
-      # Optional registry digest checks through the Docker Engine API. Checks are
-      # cached and only one stale image is refreshed per telemetry cycle.
-      # - IMAGE_UPDATE_CHECK_ENABLED=true
-      # - IMAGE_UPDATE_CHECK_INTERVAL_SEC=21600
-      # - IMAGE_UPDATE_REGISTRIES=docker.io,registry-1.docker.io,ghcr.io,quay.io
-      # Optional read-only Docker CLI config for private registry authentication.
-      # Credentials stay agent-local and are sent only to the local Docker Engine.
-      # - DOCKER_CONFIG_FILE=/run/secrets/docker-config.json
-      # Infrastructure Vault (Phase 4, enterprise). 32-byte AES-256 key, base64:
-      #   openssl rand -base64 32
-      # The hub never receives this key; keep it wherever you keep your DR secrets.
-      # - VAULT_KEY=CHANGE_ME_base64_32_bytes
-      # - VAULT_PATHS=/host/compose:/host/stacks
-      # Optional Proxmox VE API. TLS verification is mandatory; mount the
-      # cluster CA and grant this token only the VM privileges it needs.
-      # - PROXMOX_API_URL=https://pve.example.com:8006
-      # - PROXMOX_TOKEN_ID=control-plane@pve!agent
-      # - PROXMOX_TOKEN_SECRET=replace-me
-      # - PROXMOX_CA_FILE=/run/secrets/proxmox-ca.pem
-      # - PROXMOX_GUEST_ALLOWLIST=100,101,205
+    env_file:
+      - ${AGENT_ENV_FILE:-agent.env}
     volumes:
-      # Read-only Docker socket for container lifecycle & crash-loop monitoring
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Read-only host kernel /proc & /sys for CPU, RAM, load, and storage metrics
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      # Read-only compose/.env locations for encrypted config backups (Vault)
-      # - /opt/stacks:/host/compose:ro
-      # - /root/.docker/config.json:/run/secrets/docker-config.json:ro
-    # Optional: Give SYS_RAWIO capability only if deep S.M.A.R.T. disk scanning is needed
-    cap_add:
-      - SYS_RAWIO
-    devices:
-      - /dev/sda:/dev/sda:r
-      - /dev/sdb:/dev/sdb:r
+    # No inbound ports are published. Add host paths, devices, or capabilities
+    # only when enabling Vault backups or deep SMART inspection.

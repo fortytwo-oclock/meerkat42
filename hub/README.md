@@ -1,4 +1,4 @@
-# Control Plane Hub
+# Meerkat42 Hub reference
 
 FastAPI hub: WebSocket telemetry ingestion, persistence, alerting, time-series
 retention, multi-tenant REST API.
@@ -59,7 +59,7 @@ storage-agnostic.
   cross-scope IDs return 404. `acknowledged_by` is always the principal label.
 - All node-addressed reads are tenant-scoped.
 
-## Infrastructure Vault (Phase 4)
+## Infrastructure Vault
 
 `POST /api/v1/nodes/{id}/backup` sends `request_config_backup` down the node's live
 tunnel. The agent encrypts each compose/env file (AES-256-GCM, per-file 12-byte
@@ -99,7 +99,7 @@ uvicorn hub.main:app --reload --port 8080
 - `WS   /api/v1/agent/stream` — agent ingestion (unchanged protocol)
 - `WS   /api/v1/ui/stream` — live telemetry/alert push to dashboards
 
-## Stripe billing automation (Phase 5)
+## Stripe billing automation
 
 The webhook consumes `customer.subscription.created`, `.updated`, and
 `.deleted`. Each Stripe subscription must include `metadata.tenant_slug`; the
@@ -177,7 +177,7 @@ currently globally unique across the Hub. A collision is rejected with
 `NODE_ID_CONFLICT`, so managed deployments should configure stable UUID-style
 `NODE_ID` values rather than hostnames alone.
 
-## Alert dispatch (Phase 3)
+## Alert dispatch
 
 Background `dispatch_loop` picks up `AlertEvent`s and delivers to matching
 channels (`hub/notify/`): FIRING once (`dispatched_at`), then RESOLVED once

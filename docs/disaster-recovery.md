@@ -78,7 +78,7 @@ select the preceding recovery point, and repeat in a new isolated target.
 
 ## Incident communication template
 
-> The Control Plane is unavailable while we recover durable state from the most
+> Meerkat42 is unavailable while we recover durable state from the most
 > recent verified backup. Current estimated recovery point: [time]. Next update:
 > [time]. Agent monitoring may buffer or reconnect automatically; remote actions
 > are suspended until database integrity is confirmed.

@@ -1,4 +1,4 @@
-# Control Plane Dashboard
+# Meerkat42 dashboard reference
 
 Next.js 14 (App Router) + Tailwind + shadcn-style UI. Connects to the Hub's REST
 API and the `/api/v1/ui/stream` WebSocket for live updates.
