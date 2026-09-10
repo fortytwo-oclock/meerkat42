@@ -127,6 +127,11 @@ add the highest-priority rule below:
 Bypass only that exact path. Do not bypass `/api/*`. The Hub still requires the
 agent's enrollment token on the WebSocket handshake.
 
+When configuring the rule through Pangolin's API or database representation,
+use the `ACCEPT` action (shown as **Allow** or **Bypass authentication** in the
+UI). Do not use `PASS`: in Pangolin, `PASS` continues the request to resource
+authentication, which prevents a headless agent from connecting.
+
 If Stripe billing webhooks are enabled, also bypass only
 `/api/v1/billing/stripe/webhook`; the Hub validates Stripe's webhook signature.
 No other API path should need a Pangolin authentication bypass.
