@@ -16,6 +16,10 @@ frontend/.next/
 # Env
 .env
 .env.local
+/deploy/test.env
+/deploy/test-license.txt
+/deploy/test-totp-uri.txt
+/deploy/test-fixtures/
 
 # Go
 /agent

@@ -82,3 +82,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: docker compose --env-file deploy/cloud.env.example -f deploy/docker-compose.cloud.yml config
+      - run: docker compose --env-file deploy/test.env.example -p control-plane-test -f deploy/docker-compose.test.yml config

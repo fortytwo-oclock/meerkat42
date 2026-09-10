@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
@@ -36,6 +36,7 @@ async def get_license(
 @router.post("/license")
 async def apply_license(
     req: LicenseSubmit,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     lm: LicenseManager = Depends(get_tenant_license_manager),
     tenant_id: str = Depends(get_tenant_id),
@@ -51,6 +52,8 @@ async def apply_license(
         session, tenant_id, raw_token=req.license_token, claims=claims
     )
     await session.commit()
+    if tenant_id == request.app.state.default_tenant_id:
+        request.app.state.license_manager.load_from_record(req.license_token, {})
     return {
         "success": True,
         "message": "License cryptographically verified and applied offline.",

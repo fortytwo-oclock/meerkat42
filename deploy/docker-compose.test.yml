@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: control_plane
+      POSTGRES_USER: control_plane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/bootstrap_test_config.py}
+    volumes: [test-postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U control_plane -d control_plane"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    command: ["python", "-m", "hub.bootstrap"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?run scripts/bootstrap_test_config.py}
+      AUTO_MIGRATE: "true"
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:?run scripts/bootstrap_test_config.py}
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [backend]
+
+  hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?run scripts/bootstrap_test_config.py}
+      AUTO_MIGRATE: "false"
+      BACKGROUND_WORKERS_ENABLED: "false"
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:3000
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?run scripts/bootstrap_test_config.py}
+      AGENT_BOOTSTRAP_TOKEN: ${AGENT_BOOTSTRAP_TOKEN:?run scripts/bootstrap_test_config.py}
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:?run scripts/bootstrap_test_config.py}
+      REMOTE_COMMAND_TWO_PERSON_APPROVAL: ${REMOTE_COMMAND_TWO_PERSON_APPROVAL:-false}
+      EMERGENCY_CONSOLE_ENABLED: ${EMERGENCY_CONSOLE_ENABLED:-true}
+      EMERGENCY_TOTP_SECRET: ${EMERGENCY_TOTP_SECRET:?run scripts/bootstrap_test_config.py}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/ready"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [backend, edge]
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    command: ["python", "-m", "hub.worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?run scripts/bootstrap_test_config.py}
+      AUTO_MIGRATE: "false"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    networks: [backend, edge]
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        HUB_URL: http://hub:8080
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      hub: {condition: service_healthy}
+    networks: [edge]
+
+  agent:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    environment:
+      HUB_URL: ws://hub:8080/api/v1/agent/stream
+      NODE_ID: test-agent-01
+      AUTH_TOKEN: ${AGENT_BOOTSTRAP_TOKEN:?run scripts/bootstrap_test_config.py}
+      CLIENT_GROUP: default
+      PUSH_INTERVAL_SEC: "5"
+      VAULT_KEY: ${VAULT_KEY:?run scripts/bootstrap_test_config.py}
+      VAULT_PATHS: /host/compose
+      IMAGE_UPDATE_CHECK_ENABLED: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - ./test-fixtures/compose:/host/compose:ro
+    depends_on:
+      hub: {condition: service_healthy}
+    networks: [edge]
+
+  mailpit:
+    image: axllent/mailpit:v1.30.5
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+    networks: [edge]
+
+networks:
+  backend: {internal: true}
+  edge: {}
+
+volumes:
+  test-postgres: {}

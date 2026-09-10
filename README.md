@@ -51,6 +51,12 @@ pip install -r hub/requirements.txt && uvicorn hub.main:app --reload   # :8080
 cd frontend && npm install && npm run dev                              # :3000
 ```
 
+For a disposable full-stack acceptance environment, including PostgreSQL,
+Redis, a worker, dashboard, agent, Vault fixtures, TOTP diagnostics, and Mailpit,
+follow [`docs/test-environment.md`](docs/test-environment.md). A ready-to-paste
+Claude Code brief is in
+[`docs/claude-code-test-environment-prompt.md`](docs/claude-code-test-environment-prompt.md).
+
 ## Managed-cloud baseline
 
 `deploy/docker-compose.cloud.yml` provides a production-shaped single-host
