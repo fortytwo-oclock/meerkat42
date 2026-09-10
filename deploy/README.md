@@ -36,3 +36,14 @@ and quarterly restore drills are documented in
 creates an atomic dump and SHA-256 manifest; the verification command restores
 into an isolated SQLite database or an explicitly named PostgreSQL
 `*_restore_drill` database.
+
+## Raspberry Pi and ARM
+
+`docker-compose.pi.yml` is the small-fleet ARM64 headend profile. It runs the Hub
+with SQLite plus the dashboard and is intended for a Pi 4 (4 GB+) or Pi 5 using
+a 64-bit OS and SSD-backed storage. Copy `pi.env.example`, replace the token
+placeholders, and follow [`docs/platform-support.md`](../docs/platform-support.md).
+
+Older 32-bit Raspberry Pis are supported as edge agents through the ARMv6 and
+ARMv7 native builds. The complete dashboard headend is not supported on 32-bit
+systems because its maintained Node/Next.js container toolchain is 64-bit only.

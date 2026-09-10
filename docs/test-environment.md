@@ -182,8 +182,10 @@ $env:DATABASE_URL='sqlite+aiosqlite:///./data/manual-check.db'
 & .\.venv\Scripts\python.exe -m unittest discover -s hub\tests -v
 & .\.tools\go\bin\go.exe test ./...
 & .\.tools\go\bin\go.exe vet ./...
+& .\.venv\Scripts\python.exe scripts\build_agent_artifacts.py --output-dir dist\agents
 Push-Location frontend; npm run build; Pop-Location
 docker compose --env-file deploy\test.env -p control-plane-test -f deploy\docker-compose.test.yml config --quiet
+docker compose --env-file deploy\pi.env.example -f deploy\docker-compose.pi.yml config --quiet
 ```
 
 Use the system `go` executable when the workspace-local toolchain is absent.

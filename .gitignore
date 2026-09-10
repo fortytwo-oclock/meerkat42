@@ -24,6 +24,7 @@ frontend/.next/
 # Go
 /agent
 /hub-bin
+/dist/
 
 # Workspace-local development toolchains
 /.tools/
