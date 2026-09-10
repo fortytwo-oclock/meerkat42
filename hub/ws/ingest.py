@@ -98,7 +98,7 @@ async def agent_stream(websocket: WebSocket) -> None:
 
     try:
         async with session_scope() as session:
-            await nodes_repo.upsert_handshake(
+            node = await nodes_repo.upsert_handshake(
                 session,
                 tenant_id=tenant_id,
                 node_id=node_id,
@@ -112,7 +112,12 @@ async def agent_stream(websocket: WebSocket) -> None:
             # node recovered. Do not wait for the watchdog to infer a state
             # transition after upsert_handshake has already marked it ONLINE.
             await alerts_repo.resolve_by_type(session, node_id, "NODE_OFFLINE")
-        await bus.publish({"type": "node.connected", "node_id": node_id})
+        await bus.publish({
+            "type": "node.connected",
+            "node_id": node_id,
+            "tenant_id": tenant_id,
+            "group_id": node.group_id,
+        })
 
         while True:
             data = json.loads(await websocket.receive_text())
@@ -140,6 +145,8 @@ async def agent_stream(websocket: WebSocket) -> None:
                 {
                     "type": "telemetry",
                     "node_id": node_id,
+                    "tenant_id": tenant_id,
+                    "group_id": node.group_id if node is not None else None,
                     "ts": ts.isoformat(),
                     "scalars": extract_scalars(data),
                 }
@@ -170,6 +177,7 @@ async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> No
         await bus.publish({
             "type": "command.complete", "node_id": node_id,
             "command_id": command_id, "status": command.status,
+            "tenant_id": tenant_id, "group_id": None,
         })
         return
     if action != "request_config_backup":
@@ -199,6 +207,8 @@ async def _handle_command_result(node_id: str, tenant_id: str, data: dict) -> No
         {
             "type": "backup.complete",
             "node_id": node_id,
+            "tenant_id": tenant_id,
+            "group_id": None,
             "command_id": command_id,
             "status": "ERROR" if error else "COMPLETE",
         }

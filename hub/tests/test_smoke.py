@@ -60,6 +60,21 @@ class HubSmokeTest(unittest.TestCase):
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         self.assertEqual(response.headers["Cross-Origin-Opener-Policy"], "same-origin")
 
+    def test_ui_websocket_requires_subprotocol_token(self) -> None:
+        with self.client.websocket_connect(
+            "/api/v1/ui/stream", subprotocols=["meerkat42"]
+        ) as socket:
+            self.assertEqual(socket.receive_json()["error"], "UNAUTHORIZED")
+
+    def test_ui_websocket_accepts_owner_token_without_url_leak(self) -> None:
+        encoded = base64.urlsafe_b64encode(b"test-owner-token").decode().rstrip("=")
+        with self.client.websocket_connect(
+            "/api/v1/ui/stream",
+            subprotocols=["meerkat42", f"token.{encoded}"],
+        ) as socket:
+            self.assertEqual(socket.accepted_subprotocol, "meerkat42")
+            self.assertEqual(socket.receive_json()["type"], "hello")
+
     def test_agent_enrollment_token_is_shown_once_and_revocable(self) -> None:
         created = self.client.post(
             "/api/v1/agent-tokens",

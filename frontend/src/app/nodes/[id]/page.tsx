@@ -118,7 +118,7 @@ export default function NodeDetailPage() {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
+    <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
         ← Fleet
       </Link>
@@ -511,6 +511,6 @@ export default function NodeDetailPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }

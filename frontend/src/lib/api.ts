@@ -182,11 +182,15 @@ export function setAdminToken(token: string) {
 }
 
 function adminHeader(): Record<string, string> {
+  const t = getAdminToken();
+  return t ? { "X-Admin-Token": t } : {};
+}
+
+export function getAdminToken(): string {
   try {
-    const t = localStorage.getItem("hub_admin_token");
-    return t ? { "X-Admin-Token": t } : {};
+    return localStorage.getItem("hub_admin_token") ?? "";
   } catch {
-    return {};
+    return "";
   }
 }
 

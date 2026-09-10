@@ -21,21 +21,31 @@ export default function DashboardPage() {
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [branding, setBranding] = useState<Branding | null>(null);
   const [showLicense, setShowLicense] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadMeta = useCallback(async () => {
-    const [g, l, b] = await Promise.all([
-      api.groups(),
-      api.license(),
-      api.branding().catch(() => null),
-    ]);
-    setGroups(g.groups);
-    setLicense(l);
-    setBranding(b);
+    try {
+      const [g, l, b] = await Promise.all([
+        api.groups(),
+        api.license(),
+        api.branding().catch(() => null),
+      ]);
+      setGroups(g.groups);
+      setLicense(l);
+      setBranding(b);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load dashboard data");
+    }
   }, []);
 
   const loadAlerts = useCallback(async () => {
-    const { alerts } = await api.alerts(active);
-    setAlerts(alerts);
+    try {
+      const { alerts } = await api.alerts(active);
+      setAlerts(alerts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load alerts");
+    }
   }, [active]);
 
   useEffect(() => {
@@ -52,7 +62,7 @@ export default function DashboardPage() {
   const productName = branding?.product_name ?? "Control Plane";
 
   return (
-    <div
+    <main
       className="mx-auto max-w-7xl space-y-6 p-6"
       style={
         branding?.primary_color
@@ -60,7 +70,7 @@ export default function DashboardPage() {
           : undefined
       }
     >
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">
             {logo ? (
@@ -78,7 +88,7 @@ export default function DashboardPage() {
               : "…"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link
             href="/settings"
             className="inline-flex h-9 items-center rounded-md border border-input px-4 text-sm font-medium hover:bg-muted"
@@ -90,6 +100,12 @@ export default function DashboardPage() {
           </Button>
         </div>
       </header>
+
+      {error && (
+        <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          Authentication is required. Save your operator token in Settings.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -124,6 +140,6 @@ export default function DashboardPage() {
         license={license}
         onApplied={loadMeta}
       />
-    </div>
+    </main>
   );
 }

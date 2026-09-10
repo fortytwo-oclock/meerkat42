@@ -85,5 +85,7 @@ jobs:
       - run: docker compose --env-file deploy/self-host.env.example -f deploy/docker-compose.hub.yml config
       - run: AGENT_ENV_FILE=agent.env.example docker compose -f deploy/docker-compose.agent.yml config
       - run: docker compose --env-file deploy/cloud.env.example -f deploy/docker-compose.cloud.yml config
+      - run: python scripts/bootstrap_cloud.py --domain monitor.example.com --output /tmp/cloud.env
+      - run: docker compose --env-file /tmp/cloud.env -f deploy/docker-compose.cloud.yml -f deploy/docker-compose.pangolin.yml config
       - run: docker compose --env-file deploy/test.env.example -p control-plane-test -f deploy/docker-compose.test.yml config
       - run: docker compose --env-file deploy/pi.env.example -f deploy/docker-compose.pi.yml config

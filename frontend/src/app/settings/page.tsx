@@ -91,7 +91,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
+    <main className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
         ← Fleet
       </Link>
@@ -495,7 +495,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </main>
   );
 }
 

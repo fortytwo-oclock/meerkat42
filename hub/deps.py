@@ -54,19 +54,35 @@ async def authenticate(
     x_admin_token: str | None = Header(default=None),
     x_tenant_slug: str | None = Header(default=None),
 ) -> Principal:
-    settings = get_settings()
-    tenant_id = request.app.state.default_tenant_id
     presented = _bearer(authorization, x_admin_token)
+    return await authenticate_presented(
+        session,
+        presented=presented,
+        default_tenant_id=request.app.state.default_tenant_id,
+        tenant_slug=x_tenant_slug,
+    )
+
+
+async def authenticate_presented(
+    session: AsyncSession,
+    *,
+    presented: str | None,
+    default_tenant_id: str,
+    tenant_slug: str | None = None,
+) -> Principal:
+    """Authenticate a raw credential for HTTP or WebSocket transports."""
+    settings = get_settings()
+    tenant_id = default_tenant_id
 
     # 1. Root ADMIN_TOKEN -> owner
     if settings.admin_token and presented and hmac.compare_digest(
         presented, settings.admin_token
     ):
-        if x_tenant_slug:
+        if tenant_slug:
             from hub.models import Tenant
 
             row = await session.execute(
-                select(Tenant.id).where(Tenant.slug == x_tenant_slug.strip().lower())
+                select(Tenant.id).where(Tenant.slug == tenant_slug.strip().lower())
             )
             selected = row.scalar_one_or_none()
             if selected is None:

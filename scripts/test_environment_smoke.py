@@ -83,6 +83,11 @@ def main() -> None:
     parser.add_argument("--env-file", type=Path, default=Path("deploy/test.env"))
     parser.add_argument("--license-file", type=Path, default=Path("deploy/test-license.txt"))
     parser.add_argument("--node-id", default="test-agent-01")
+    parser.add_argument(
+        "--skip-emergency",
+        action="store_true",
+        help="Skip the TOTP diagnostic when break-glass access is disabled",
+    )
     args = parser.parse_args()
     env = load_env(args.env_file)
     api = API(args.base_url, env["ADMIN_TOKEN"])
@@ -186,20 +191,25 @@ def main() -> None:
     assert restored[".env"] == (fixture_root / ".env").read_bytes()
     print("PASS  Vault ciphertext-only storage and offline round-trip decryption")
 
-    counter = int(time.time()) // 30
-    totp = code_at(env["EMERGENCY_TOTP_SECRET"], counter)
-    emergency = api.call("POST", "/api/v1/emergency/sessions", {}, headers={"X-TOTP-Code": totp})
-    diagnostic = api.call(
-        "POST", f"/api/v1/nodes/{args.node_id}/diagnostics", {"diagnostic": "uptime"},
-        headers={"X-Emergency-Grant": emergency["grant"]},
-    )
-    def diagnostic_done():
-        command = api.call("GET", f"/api/v1/commands/{diagnostic['id']}")
-        if command["status"] in {"FAILED", "TIMED_OUT"}:
-            raise RuntimeError(command.get("error"))
-        return command if command["status"] == "SUCCEEDED" and command.get("result", {}).get("output") else None
-    wait_for("TOTP-gated bounded diagnostic", diagnostic_done, 45)
-    api.call("DELETE", "/api/v1/emergency/sessions", headers={"X-Emergency-Grant": emergency["grant"]})
+    if args.skip_emergency:
+        print("SKIP  TOTP-gated diagnostic (break-glass access disabled)")
+    else:
+        counter = int(time.time()) // 30
+        totp = code_at(env["EMERGENCY_TOTP_SECRET"], counter)
+        emergency = api.call("POST", "/api/v1/emergency/sessions", {}, headers={"X-TOTP-Code": totp})
+        diagnostic = api.call(
+            "POST", f"/api/v1/nodes/{args.node_id}/diagnostics", {"diagnostic": "uptime"},
+            headers={"X-Emergency-Grant": emergency["grant"]},
+        )
+
+        def diagnostic_done():
+            command = api.call("GET", f"/api/v1/commands/{diagnostic['id']}")
+            if command["status"] in {"FAILED", "TIMED_OUT"}:
+                raise RuntimeError(command.get("error"))
+            return command if command["status"] == "SUCCEEDED" and command.get("result", {}).get("output") else None
+
+        wait_for("TOTP-gated bounded diagnostic", diagnostic_done, 45)
+        api.call("DELETE", "/api/v1/emergency/sessions", headers={"X-Emergency-Grant": emergency["grant"]})
 
     viewer = api.call("POST", "/api/v1/tokens", {"name": "smoke viewer", "role": "viewer", "group_slug": "default"})
     visible = api.call("GET", "/api/v1/nodes", token=viewer["token"])["nodes"]

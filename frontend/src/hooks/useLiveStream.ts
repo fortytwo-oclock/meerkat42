@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { wsUrl } from "@/lib/api";
+import { getAdminToken, wsUrl } from "@/lib/api";
 
 export interface LiveEvent {
   type: string;
@@ -20,9 +20,18 @@ export function useLiveStream(onEvent: (e: LiveEvent) => void) {
     let ws: WebSocket | null = null;
     let closed = false;
     let backoff = 1000;
+    const token = getAdminToken();
+    const protocols = ["meerkat42"];
+    if (token) {
+      const encodedToken = btoa(unescape(encodeURIComponent(token)))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      protocols.push(`token.${encodedToken}`);
+    }
 
     const connect = () => {
-      ws = new WebSocket(wsUrl("/api/v1/ui/stream"));
+      ws = new WebSocket(wsUrl("/api/v1/ui/stream"), protocols);
       ws.onopen = () => {
         setConnected(true);
         backoff = 1000;
@@ -34,9 +43,9 @@ export function useLiveStream(onEvent: (e: LiveEvent) => void) {
           /* ignore */
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         setConnected(false);
-        if (!closed) {
+        if (!closed && event.code !== 4401) {
           setTimeout(connect, backoff);
           backoff = Math.min(backoff * 2, 15000);
         }

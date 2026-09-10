@@ -22,9 +22,11 @@ frontend/.next/
 /deploy/test-fixtures/
 /deploy/self-host.env
 /deploy/agent.env
+/deploy/cloud.env
 
 # Go
 /agent
+/agent.exe
 /hub-bin
 /dist/
 

@@ -1,0 +1,17 @@
+# Overlay for deployments published through Pangolin, Cloudflare Tunnel, or
+# another reverse proxy that terminates TLS outside this Compose project.
+#
+# Usage:
+#   docker compose --env-file deploy/cloud.env \
+#     -f deploy/docker-compose.cloud.yml \
+#     -f deploy/docker-compose.pangolin.yml up -d --build
+#
+# Caddy remains in front of the application, but listens as plain HTTP on a
+# loopback-only port. Run Newt on this same host and target
+# http://127.0.0.1:8080. No application or database port is published.
+services:
+  caddy:
+    environment:
+      DOMAIN: ":8080"
+    ports: !override
+      - "${BIND_ADDRESS:-127.0.0.1}:${EDGE_PORT:-8080}:8080"

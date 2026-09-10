@@ -27,12 +27,33 @@ environment files out of Git; every real template has an ignored counterpart.
 - One-shot bootstrap applies migrations and seeds defaults before services start.
 - PostgreSQL stores durable tenant, telemetry, alert, Vault, and billing state.
 
-Copy `cloud.env.example`, replace every placeholder, point the domain's DNS at
-the host, then run:
+Generate secure core credentials (Stripe stays disabled until configured), or
+copy `cloud.env.example` and replace every placeholder:
+
+```bash
+python scripts/bootstrap_cloud.py --domain monitor.example.com
+```
+
+Point the domain's DNS at the host, then run:
 
 ```bash
 docker compose --env-file deploy/cloud.env -f deploy/docker-compose.cloud.yml up -d --build
 ```
+
+When Pangolin, Cloudflare Tunnel, or another external reverse proxy terminates
+TLS, use the included overlay instead of publishing Caddy on ports 80/443:
+
+```bash
+docker compose --env-file deploy/cloud.env \
+  -f deploy/docker-compose.cloud.yml \
+  -f deploy/docker-compose.pangolin.yml up -d --build
+```
+
+This runs Caddy as a plain-HTTP edge bound to `127.0.0.1:8080`; the dashboard,
+Hub, PostgreSQL, and Redis remain private. Run the tunnel connector on the same
+host and point its HTTP target at `127.0.0.1:8080`. Caddy forwards `/api`
+(including WebSockets) to the Hub and all other requests to the dashboard,
+while applying the same security headers as a direct-TLS installation.
 
 For a multi-host or multi-region deployment, use managed PostgreSQL and Redis,
 run `python -m hub.bootstrap` once per release, run exactly one

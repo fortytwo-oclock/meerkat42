@@ -70,6 +70,11 @@ docker compose -f deploy/docker-compose.agent.yml up -d --build
 docker compose -f deploy/docker-compose.agent.yml logs -f agent
 ```
 
+If the agent and the self-hosted Hub run from this same checkout on the same
+Docker host, use `HUB_URL=ws://hub:8080/api/v1/agent/stream`. Both Compose files
+share the `deploy_default` network, so the agent must use the Hub service name;
+`127.0.0.1` inside the agent container refers to the agent itself.
+
 The agent publishes no inbound ports. It mounts the host's `/proc`, `/sys`, and
 Docker socket read-only so it can collect host and container telemetry. The node
 should appear in the dashboard within 30 seconds.

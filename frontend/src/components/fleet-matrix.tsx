@@ -15,12 +15,19 @@ const MAX_SPARK = 30;
 export function FleetMatrix({ group }: { group?: string }) {
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const cpuHistory = useRef<Record<string, number[]>>({});
 
   const refresh = useCallback(async () => {
-    const { nodes } = await api.nodes(group);
-    setNodes(nodes);
-    setLoading(false);
+    try {
+      const { nodes } = await api.nodes(group);
+      setNodes(nodes);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load the fleet");
+    } finally {
+      setLoading(false);
+    }
   }, [group]);
 
   useEffect(() => {
@@ -64,7 +71,17 @@ export function FleetMatrix({ group }: { group?: string }) {
         {connected ? "Live" : "Reconnecting…"} · {nodes.length} nodes
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="rounded-lg border p-4 text-sm">
+          <p className="font-medium">Operator token required</p>
+          <p className="mt-1 text-muted-foreground">
+            Open Settings and save an owner, admin, or viewer token for this browser.
+          </p>
+          <Link href="/settings" className="mt-3 inline-block underline underline-offset-4">
+            Open Settings
+          </Link>
+        </div>
+      ) : loading ? (
         <p className="text-sm text-muted-foreground">Loading fleet…</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

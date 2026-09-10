@@ -83,22 +83,33 @@ Pin a tested Newt image version for a production installation.
 
 ### 2. Create one HTTPS public resource
 
-Create a public HTTP/HTTPS resource named `Meerkat42` with the public domain
-`monitor.example.com`. Add these two targets to the same resource:
+For the PostgreSQL/Redis cloud topology, start Meerkat42 with
+`deploy/docker-compose.pangolin.yml` as documented in `deploy/README.md`. Caddy
+then provides the complete application on one loopback target:
+
+| Method | Hostname | Port | Path | Match | Rewrite |
+|---|---:|---:|---|---|---|
+| HTTP | `127.0.0.1` | 8080 | `/` | Prefix | None |
+
+For the self-hosted SQLite or Raspberry Pi topology, create one public
+HTTP/HTTPS resource named `Meerkat42` with the public domain
+`monitor.example.com`, then add these two targets to that resource:
 
 | Method | Hostname | Port | Path | Match | Rewrite |
 |---|---:|---:|---|---|---|
 | HTTP | `127.0.0.1` | 8080 | `/api` | Prefix | None |
 | HTTP | `127.0.0.1` | 3000 | `/` | Prefix | None |
 
-Pangolin gives the more-specific `/api` target priority over the `/` catch-all.
-If you set priorities manually, give the Hub target the higher value. Do not
-configure either target to strip or rewrite its path.
+In the two-target topology, Pangolin gives the more-specific `/api` target
+priority over the `/` catch-all. If you set priorities manually, give the Hub
+target the higher value. Do not configure any target to strip or rewrite its
+path.
 
 Optional health checks are:
 
-- Hub target: `GET /api/v1/ready`, expected status 200.
-- Dashboard target: `GET /`, expected status 200.
+- Cloud Caddy target: `GET /api/v1/ready`, expected status 200.
+- Self-hosted Hub target: `GET /api/v1/ready`, expected status 200.
+- Self-hosted dashboard target: `GET /`, expected status 200.
 
 Enable Pangolin SSO and grant the resource only to the users or roles that
 should see the dashboard. Pangolin authentication is an additional outer
