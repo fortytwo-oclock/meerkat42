@@ -21,10 +21,10 @@ customer data or production secrets.
 
 ## 1. Prepare the repository
 
-PowerShell:
+PowerShell, from any checkout location:
 
 ```powershell
-cd C:\tools\remotemonitortool\control-plane
+cd C:\path\to\meerkat42
 python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install -r hub\requirements.txt
 & .\.venv\Scripts\python.exe scripts\bootstrap_test_config.py
@@ -33,7 +33,7 @@ python -m venv .venv
 Bash:
 
 ```bash
-cd /path/to/control-plane
+cd /path/to/meerkat42
 python3 -m venv .venv
 .venv/bin/python -m pip install -r hub/requirements.txt
 .venv/bin/python scripts/bootstrap_test_config.py
