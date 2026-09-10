@@ -1,0 +1,25 @@
+[Unit]
+Description=Distributed Control Plane edge agent
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/control-plane-agent.env
+ExecStart=/usr/local/bin/control-plane-agent
+Restart=always
+RestartSec=5s
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

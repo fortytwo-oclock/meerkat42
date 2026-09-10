@@ -1,0 +1,41 @@
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HUB_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/data/hub.db
+      ED25519_PUBLIC_KEY: ${ED25519_PUBLIC_KEY:?set ED25519_PUBLIC_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}
+      AGENT_BOOTSTRAP_TOKEN: ${AGENT_BOOTSTRAP_TOKEN:?set AGENT_BOOTSTRAP_TOKEN}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - pi-hub-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        HUB_URL: http://hub:8080
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      HUB_URL: http://hub:8080
+    depends_on:
+      hub:
+        condition: service_healthy
+
+volumes:
+  pi-hub-data:

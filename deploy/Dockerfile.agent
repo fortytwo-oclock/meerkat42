@@ -1,12 +1,19 @@
-# Multi-stage build for ultra-lightweight Edge Agent (< 20MB)
-FROM golang:1.21-alpine AS builder
+# syntax=docker/dockerfile:1
+# Multi-stage, multi-platform build for the ultra-lightweight Edge Agent.
+FROM --platform=$BUILDPLATFORM golang:1.21-alpine AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG TARGETVARIANT
 
 WORKDIR /build
 COPY go.mod ./
 # If go.sum exists, copy it
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o agent ./cmd/agent
+RUN case "$TARGETVARIANT" in v*) export GOARM="${TARGETVARIANT#v}" ;; esac; \
+    CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
+    go build -trimpath -ldflags="-s -w" -o agent ./cmd/agent
 
 FROM alpine:3.19
 

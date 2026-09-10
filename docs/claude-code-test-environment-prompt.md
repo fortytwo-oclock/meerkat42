@@ -50,8 +50,9 @@ Execution:
     ONLINE/RESOLVED plus notification behavior.
 11. Test a stored one-time agent enrollment token and revocation as documented.
 12. Run the source-level checks: Alembic upgrade/check, all Hub tests, Python
-    compile and dependency check, Go test/vet/build, frontend production build,
-    and Compose config validation.
+    compile and dependency check, Go test/vet/build, all five agent targets via
+    `scripts/build_agent_artifacts.py`, frontend production build, and Compose
+    config validation for the test, cloud, and Raspberry Pi profiles.
 13. Run an SQLite backup and isolated restore verification using the existing DR
     scripts. If a disposable PostgreSQL drill database is available, also test a
     dump/restore using a database name ending in `_restore_drill`.
@@ -75,6 +76,8 @@ Acceptance criteria:
 - A scoped viewer can read its group and cannot mutate.
 - SMTP test delivery reaches Mailpit; an alert resolves after agent recovery.
 - Migrations have no model drift; all unit tests and production builds pass.
+- Agent artifacts compile for amd64, 386, arm64, ARMv7, and ARMv6, and every
+  entry in their `SHA256SUMS` manifest verifies.
 - `git diff --check` passes, generated secrets remain ignored, and no unexpected
   tracked files or Docker resources are modified.
 

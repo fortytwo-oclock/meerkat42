@@ -57,6 +57,12 @@ follow [`docs/test-environment.md`](docs/test-environment.md). A ready-to-paste
 Claude Code brief is in
 [`docs/claude-code-test-environment-prompt.md`](docs/claude-code-test-environment-prompt.md).
 
+Agent binaries are CI-built for Linux x86-64, x86 32-bit, ARM64, ARMv7, and
+ARMv6. The complete headend supports x86-64 and ARM64, including a lightweight
+Raspberry Pi 4/5 profile. See
+[`docs/platform-support.md`](docs/platform-support.md) for the exact matrix,
+cross-build commands, Pi setup, and hardware acceptance checklist.
+
 ## Managed-cloud baseline
 
 `deploy/docker-compose.cloud.yml` provides a production-shaped single-host
@@ -157,7 +163,8 @@ replicas, so WebSocket session affinity is not required. See
 
 The repository CI workflow validates every component on each push and pull
 request: Go unit tests (including the Vault encryption and tunnel command-result
-paths), race detection, `go vet`, native and Linux amd64/arm64 agent builds, the
+paths), race detection, `go vet`, native and Linux amd64/386/arm64/armv7/armv6
+agent builds, the
 Alembic upgrade/check/downgrade/upgrade cycle, Hub API smoke tests, and the
 Next.js production build.
 
