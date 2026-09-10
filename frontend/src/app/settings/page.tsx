@@ -91,19 +91,20 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-6">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
         ← Fleet
       </Link>
       <h1 className="text-xl font-semibold">Settings</h1>
-      {err && <p className="text-sm text-destructive">{err}</p>}
+      {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
 
       <Card>
         <CardHeader>
           <CardTitle>Operator token</CardTitle>
         </CardHeader>
-        <CardContent className="flex gap-2">
+        <CardContent className="flex flex-col gap-2 sm:flex-row">
           <Input
+            aria-label="Operator token"
             type="password"
             placeholder="ADMIN_TOKEN (only if the hub sets one)"
             value={token}
@@ -175,6 +176,7 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-3">
                 <Input
+                  aria-label="Billing email"
                   type="email"
                   placeholder="Billing email"
                   value={checkoutEmail}
@@ -260,9 +262,9 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-2">
           {rules.map((r) => (
-            <div key={r.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
-              <div>
-                <div className="flex items-center gap-2">
+            <div key={r.id} className="flex min-w-0 flex-col gap-3 rounded-md border p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{r.name}</span>
                   <Badge variant="secondary">{r.severity}</Badge>
                   {r.is_builtin && <Badge variant="outline">builtin</Badge>}
@@ -274,6 +276,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center gap-3">
                 <Switch
+                  aria-label={`${r.enabled ? "Disable" : "Enable"} ${r.name}`}
                   checked={r.enabled}
                   onCheckedChange={(v) =>
                     guard(() => api.updateAlertRule(r.id, { enabled: v }))
@@ -302,8 +305,8 @@ export default function SettingsPage() {
         <CardContent className="space-y-2">
           {channels.map((c) => (
             <div key={c.id} className="rounded-md border p-2.5 text-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="font-medium">{c.name}</span>
                   <Badge variant="secondary">{c.kind}</Badge>
                   <Badge variant="outline">≥ {c.min_severity}</Badge>
@@ -311,8 +314,9 @@ export default function SettingsPage() {
                     <Badge variant="warning">muted</Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Switch
+                    aria-label={`${c.enabled ? "Disable" : "Enable"} ${c.name}`}
                     checked={c.enabled}
                     onCheckedChange={(v) =>
                       guard(() => api.updateChannel(c.id, { enabled: v }))
@@ -337,9 +341,10 @@ export default function SettingsPage() {
 
           <div className="space-y-2 rounded-md border border-dashed p-3">
             <div className="grid gap-2 sm:grid-cols-2">
-              <Input placeholder="Channel name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input aria-label="Channel name" placeholder="Channel name" value={name} onChange={(e) => setName(e.target.value)} />
               <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Channel type"
+                className="h-11 min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
                 value={kind}
                 onChange={(e) => setKind(e.target.value as Channel["kind"])}
               >
@@ -351,13 +356,15 @@ export default function SettingsPage() {
               </select>
             </div>
             <Input
+              aria-label="Channel configuration JSON"
               placeholder={KIND_HINT[kind]}
               value={config}
               onChange={(e) => setConfig(e.target.value)}
             />
             <div className="flex items-center gap-2">
               <select
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                aria-label="Minimum severity"
+                className="h-11 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
                 value={minSev}
                 onChange={(e) => setMinSev(e.target.value)}
               >
@@ -407,8 +414,8 @@ export default function SettingsPage() {
               </div>
             )}
             {tokens.map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
-                <div>
+              <div key={t.id} className="flex min-w-0 flex-col gap-3 rounded-md border p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <span className="font-medium">{t.name}</span>{" "}
                   <Badge variant="secondary">{t.role}</Badge>{" "}
                   {t.group_id && <Badge variant="outline">scoped</Badge>}
@@ -457,8 +464,8 @@ export default function SettingsPage() {
               </div>
             )}
             {agentTokens.map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-md border p-2.5 text-sm">
-                <div>
+              <div key={t.id} className="flex min-w-0 flex-col gap-3 rounded-md border p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <span className="font-medium">{t.name}</span>{" "}
                   <Badge variant="outline">{t.group_slug}</Badge>
                   {t.revoked && <Badge variant="destructive">revoked</Badge>}
@@ -498,9 +505,9 @@ function NewAgentTokenForm({ onCreate }: { onCreate: (b: Record<string, unknown>
   const [expires, setExpires] = useState("90");
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
-      <Input className="w-40" placeholder="Agent token name" value={name} onChange={(e) => setName(e.target.value)} />
-      <Input className="w-36" placeholder="group slug" value={groupSlug} onChange={(e) => setGroupSlug(e.target.value)} />
-      <Input className="w-28" type="number" min="1" max="365" value={expires} onChange={(e) => setExpires(e.target.value)} />
+      <Input aria-label="Agent token name" className="w-full sm:w-40" placeholder="Agent token name" value={name} onChange={(e) => setName(e.target.value)} />
+      <Input aria-label="Agent group slug" className="w-full sm:w-36" placeholder="group slug" value={groupSlug} onChange={(e) => setGroupSlug(e.target.value)} />
+      <Input aria-label="Agent token expiration in days" className="w-full sm:w-28" type="number" min="1" max="365" value={expires} onChange={(e) => setExpires(e.target.value)} />
       <Button
         size="sm"
         disabled={!name.trim() || !groupSlug.trim()}
@@ -530,13 +537,15 @@ function NewTokenForm({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
       <Input
-        className="w-40"
+        aria-label="API token name"
+        className="w-full sm:w-40"
         placeholder="Token name"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
       <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        aria-label="API token role"
+        className="h-11 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
         value={role}
         onChange={(e) => setRole(e.target.value)}
       >
@@ -546,7 +555,8 @@ function NewTokenForm({
       </select>
       {role === "viewer" && (
         <Input
-          className="w-40"
+          aria-label="API token group slug"
+          className="w-full sm:w-40"
           placeholder="group slug (optional)"
           value={groupSlug}
           onChange={(e) => setGroupSlug(e.target.value)}
@@ -581,13 +591,15 @@ function NewRuleForm({ onCreate }: { onCreate: (b: Record<string, unknown>) => v
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3">
       <Input
-        className="w-40"
+        aria-label="Alert rule name"
+        className="w-full sm:w-40"
         placeholder="Rule name"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
       <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        aria-label="Alert metric"
+        className="h-11 min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
         value={metric}
         onChange={(e) => setMetric(e.target.value)}
       >
@@ -596,7 +608,8 @@ function NewRuleForm({ onCreate }: { onCreate: (b: Record<string, unknown>) => v
         ))}
       </select>
       <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        aria-label="Alert comparator"
+        className="h-11 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
         value={comparator}
         onChange={(e) => setComparator(e.target.value)}
       >
@@ -604,13 +617,15 @@ function NewRuleForm({ onCreate }: { onCreate: (b: Record<string, unknown>) => v
         <option value="lt">&lt;</option>
       </select>
       <Input
-        className="w-20"
+        aria-label="Alert threshold"
+        className="w-full sm:w-20"
         type="number"
         value={threshold}
         onChange={(e) => setThreshold(e.target.value)}
       />
       <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+        aria-label="Alert severity"
+        className="h-11 rounded-md border border-input bg-background px-2 text-sm sm:h-9"
         value={severity}
         onChange={(e) => setSeverity(e.target.value)}
       >

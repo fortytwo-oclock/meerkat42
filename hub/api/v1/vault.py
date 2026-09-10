@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,15 +55,10 @@ async def request_backup(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    command_id = await send_command(
-        node_id,
-        "request_config_backup",
-        {"timeout_sec": _settings.vault_backup_timeout_seconds},
-        tenant_id=tenant_id,
-    )
-    if command_id is None:
-        raise HTTPException(status_code=409, detail="Node has no active connection")
-
+    # Persist the correlation row before sending. A small backup can finish on
+    # the agent before send_command returns, and ingest must already be able to
+    # resolve its command_id.
+    command_id = str(uuid.uuid4())
     backup = await vault_repo.create_pending(
         session,
         tenant_id=tenant_id,
@@ -70,6 +67,27 @@ async def request_backup(
         requested_by=principal.label,
     )
     await session.commit()
+
+    try:
+        delivered = await send_command(
+            node_id,
+            "request_config_backup",
+            {"timeout_sec": _settings.vault_backup_timeout_seconds},
+            tenant_id=tenant_id,
+            command_id=command_id,
+        )
+    except Exception:
+        delivered = None
+    if delivered is None:
+        await vault_repo.complete(
+            session,
+            command_id,
+            files=[],
+            key_fingerprint=None,
+            error="Node has no active connection",
+        )
+        await session.commit()
+        raise HTTPException(status_code=409, detail="Node has no active connection")
     return {"backup_id": backup.id, "command_id": command_id, "status": "PENDING"}
 
 

@@ -75,6 +75,7 @@ async def upsert_handshake(
     tenant_id: str,
     node_id: str,
     hostname: str,
+    arch: str,
     client_group: str,
     agent_version: str,
     remote_ip: str,
@@ -90,6 +91,7 @@ async def upsert_handshake(
     elif await get_for_tenant(session, tenant_id, node_id) is None:
         raise ValueError("node_id is already registered to another tenant")
     node.hostname = hostname or node.hostname
+    node.arch = arch or node.arch
     node.agent_version = agent_version or node.agent_version
     node.remote_ip = remote_ip
     node.status = NodeStatus.ONLINE
@@ -113,6 +115,7 @@ async def record_telemetry(
     node.last_telemetry = telemetry
     node.uptime_sec = int(telemetry.get("uptime_sec", node.uptime_sec) or 0)
     node.os = telemetry.get("os") or node.os
+    node.arch = telemetry.get("arch") or node.arch
     node.kernel = telemetry.get("kernel") or node.kernel
     node.agent_version = telemetry.get("agent_version") or node.agent_version
     await session.flush()

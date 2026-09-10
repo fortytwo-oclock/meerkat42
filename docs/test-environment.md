@@ -10,6 +10,11 @@ dashboard (`127.0.0.1:3000`), Mailpit UI (`127.0.0.1:8025`), and test SMTP
 (`127.0.0.1:1025`) to localhost. It is disposable and must never receive real
 customer data or production secrets.
 
+If those ports are already occupied, set `TEST_HUB_PORT`,
+`TEST_DASHBOARD_PORT`, `TEST_MAILPIT_UI_PORT`, and `TEST_SMTP_PORT` in the shell
+that runs Compose. Pass the selected Hub port to the smoke test with
+`--base-url`; the container-to-container addresses do not change.
+
 ## Prerequisites
 
 - Git and a clean checkout of this repository.

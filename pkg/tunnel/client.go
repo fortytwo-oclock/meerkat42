@@ -22,6 +22,8 @@ type CommandHandler func(action string, payload map[string]interface{}) (interfa
 type Config struct {
 	HubURL         string // "wss://hub.example.com/api/v1/agent/stream" or "ws://localhost:8080/..."
 	NodeID         string
+	Hostname       string
+	Arch           string
 	AuthToken      string
 	ClientGroup    string
 	PushInterval   time.Duration // default: 10s
@@ -126,6 +128,8 @@ func (c *Client) connectAndStream(ctx context.Context) error {
 	// Send initial Handshake
 	handshake := telemetry.AuthHandshake{
 		NodeID:      c.cfg.NodeID,
+		Hostname:    c.cfg.Hostname,
+		Arch:        c.cfg.Arch,
 		AuthToken:   c.cfg.AuthToken,
 		AgentVer:    "1.0.0-open-core",
 		ClientGroup: c.cfg.ClientGroup,

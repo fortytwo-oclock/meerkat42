@@ -54,6 +54,7 @@ class Node(Base):
 
     hostname: Mapped[str] = mapped_column(String(255), default="unknown")
     os: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    arch: Mapped[Optional[str]] = mapped_column(String(32), default=None)
     kernel: Mapped[Optional[str]] = mapped_column(String(128), default=None)
     agent_version: Mapped[Optional[str]] = mapped_column(String(64), default=None)
     remote_ip: Mapped[Optional[str]] = mapped_column(String(64), default=None)

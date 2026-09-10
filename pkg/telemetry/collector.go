@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ type Collector struct {
 	procPath     string
 	sysPath      string
 	dockerSock   string
+	hostname     string
 	mu           sync.Mutex
 	lastCPU      cpuSnapshot
 	imageUpdates *imageUpdateChecker
@@ -46,6 +48,10 @@ func NewCollector(proxmoxClients ...*proxmox.Client) *Collector {
 		sys = "/host/sys"
 	}
 	dockerSock := "/var/run/docker.sock"
+	hostname := strings.TrimSpace(os.Getenv("HOSTNAME_OVERRIDE"))
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
 
 	var proxmoxClient *proxmox.Client
 	if len(proxmoxClients) > 0 {
@@ -61,14 +67,21 @@ func NewCollector(proxmoxClients ...*proxmox.Client) *Collector {
 		procPath:     proc,
 		sysPath:      sys,
 		dockerSock:   dockerSock,
+		hostname:     hostname,
 		imageUpdates: newImageUpdateCheckerFromEnv(),
 		proxmox:      proxmoxClient,
 	}
 }
 
+// Hostname returns the operator override or the local system hostname used in
+// handshake and telemetry frames. Containers should set HOSTNAME_OVERRIDE to
+// the monitored host's stable name rather than reporting the container ID.
+func (c *Collector) Hostname() string {
+	return c.hostname
+}
+
 // CollectMetrics gathers complete system telemetry.
 func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
-	hostname, _ := os.Hostname()
 	uptime := c.getUptime()
 	hostMetrics := c.getHostMetrics()
 	containers := c.getDockerContainers()
@@ -90,8 +103,9 @@ func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
 
 	return &NodeTelemetry{
 		NodeID:      nodeID,
-		Hostname:    hostname,
+		Hostname:    c.hostname,
 		OS:          "Linux",
+		Arch:        runtime.GOARCH,
 		Kernel:      kernel,
 		UptimeSec:   uptime,
 		Timestamp:   time.Now().UTC(),

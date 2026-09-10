@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.config import get_settings
-from hub.models import AlertEvent, AlertRule, ClientGroup, Node
+from hub.models import AlertEvent, AlertPendingCondition, AlertRule, ClientGroup, Node
 from hub.models.alert import AlertState, Severity
 
 
@@ -141,6 +141,62 @@ async def open_or_update_event(
     session.add(event)
     await session.flush()
     return event
+
+
+async def condition_ready(
+    session: AsyncSession,
+    *,
+    rule: AlertRule,
+    node_id: str,
+    type_: str,
+    subject: str,
+) -> bool:
+    """Return true once a persisted condition has lasted for the rule duration."""
+    if rule.duration_sec <= 0:
+        return True
+
+    pending = (
+        await session.execute(
+            select(AlertPendingCondition).where(
+                AlertPendingCondition.rule_id == rule.id,
+                AlertPendingCondition.node_id == node_id,
+                AlertPendingCondition.type == type_,
+                AlertPendingCondition.subject == subject,
+            )
+        )
+    ).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    if pending is None:
+        session.add(
+            AlertPendingCondition(
+                rule_id=rule.id,
+                node_id=node_id,
+                type=type_,
+                subject=subject,
+                first_seen_at=now,
+            )
+        )
+        await session.flush()
+        return False
+
+    first_seen = pending.first_seen_at
+    if first_seen.tzinfo is None:
+        first_seen = first_seen.replace(tzinfo=timezone.utc)
+    return (now - first_seen).total_seconds() >= rule.duration_sec
+
+
+async def clear_stale_conditions(
+    session: AsyncSession,
+    node_id: str,
+    active_keys: set[tuple[str, str, str]],
+) -> None:
+    """Discard duration timers for conditions no longer present in telemetry."""
+    rows = await session.execute(
+        select(AlertPendingCondition).where(AlertPendingCondition.node_id == node_id)
+    )
+    for pending in rows.scalars():
+        if (pending.rule_id, pending.type, pending.subject) not in active_keys:
+            await session.delete(pending)
 
 
 async def resolve_stale_events(

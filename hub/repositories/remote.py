@@ -132,13 +132,22 @@ async def mark_dispatched(
 async def mark_unavailable(
     session: AsyncSession, row: RemoteCommand, *, max_attempts: int
 ) -> None:
-    row.attempts += 1
+    """Record a delivery failure after ``mark_dispatched`` reserved the attempt.
+
+    The attempt counter is incremented before the WebSocket write so a fast
+    agent response can safely observe a committed DISPATCHED row.  Do not
+    increment it again here.
+    """
+    if row.status != "DISPATCHED":
+        return
     if row.attempts >= max_attempts:
         row.status, row.error, row.completed_at = "FAILED", "agent unavailable", now()
+        row.timeout_at = None
         row.next_attempt_at = None
         event = "command.failed"
     else:
         row.status, row.error = "QUEUED", "agent unavailable; retry scheduled"
+        row.timeout_at = None
         row.next_attempt_at = now() + timedelta(seconds=min(60, 2 ** row.attempts))
         event = "command.retry_scheduled"
     await append_audit(

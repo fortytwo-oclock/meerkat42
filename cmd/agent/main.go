@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -142,6 +143,8 @@ func main() {
 	cfg := tunnel.Config{
 		HubURL:         hubURL,
 		NodeID:         nodeID,
+		Hostname:       collector.Hostname(),
+		Arch:           runtime.GOARCH,
 		AuthToken:      authToken,
 		ClientGroup:    clientGroup,
 		PushInterval:   time.Duration(intervalSec) * time.Second,

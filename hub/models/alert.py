@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hub.db.base import Base, TZDateTime, created_at_col, uuid_pk
@@ -15,6 +15,7 @@ __all__ = [
     "Severity",
     "AlertState",
     "AlertRule",
+    "AlertPendingCondition",
     "AlertEvent",
     "NotificationChannel",
 ]
@@ -24,6 +25,7 @@ class AlertMetric(str, enum.Enum):
     CPU_USAGE_PCT = "cpu_usage_pct"
     RAM_USAGE_PCT = "ram_usage_pct"
     LOAD_1 = "load_1"
+    CONTAINER_UPDATES_AVAILABLE = "container_updates_available"
     NODE_OFFLINE = "node_offline"
     CONTAINER_CRASH_LOOP = "container_crash_loop"
     ZFS_STATE = "zfs_state"
@@ -67,6 +69,28 @@ class AlertRule(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
     is_builtin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = created_at_col()
+
+
+class AlertPendingCondition(Base):
+    """Restart-safe timer for a condition that has not yet met its duration."""
+
+    __tablename__ = "alert_pending_conditions"
+    __table_args__ = (
+        UniqueConstraint(
+            "rule_id", "node_id", "type", "subject", name="uq_alert_pending_condition"
+        ),
+    )
+
+    id: Mapped[str] = uuid_pk()
+    rule_id: Mapped[str] = mapped_column(
+        ForeignKey("alert_rules.id", ondelete="CASCADE"), index=True
+    )
+    node_id: Mapped[str] = mapped_column(
+        ForeignKey("nodes.node_id", ondelete="CASCADE"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(64))
+    subject: Mapped[str] = mapped_column(String(255), default="")
+    first_seen_at: Mapped[datetime] = created_at_col()
 
 
 class AlertEvent(Base):

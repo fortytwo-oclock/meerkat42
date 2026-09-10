@@ -21,23 +21,33 @@ async def dispatch_once(settings: Settings, sender: Sender = send_command) -> in
     async with session_scope() as session:
         await remote_repo.expire(session)
         for row in await remote_repo.due(session):
-            delivered = await sender(
-                row.node_id, row.action, row.payload,
-                tenant_id=row.tenant_id, command_id=row.id,
+            try:
+                policy, _ = validate_command(row.action, row.payload)
+                timeout_seconds = policy.timeout_seconds
+            except CommandPolicyError:
+                timeout_seconds = settings.remote_command_timeout_seconds
+
+            # Commit DISPATCHED before writing to the tunnel. Fast actions such
+            # as ping can answer before send_command returns; the ingest handler
+            # must be able to observe the state it is allowed to complete.
+            await remote_repo.mark_dispatched(
+                session, row, timeout_seconds=timeout_seconds
             )
-            if delivered:
-                try:
-                    policy, _ = validate_command(row.action, row.payload)
-                    timeout_seconds = policy.timeout_seconds
-                except CommandPolicyError:
-                    timeout_seconds = settings.remote_command_timeout_seconds
-                await remote_repo.mark_dispatched(
-                    session, row, timeout_seconds=timeout_seconds
+            await session.commit()
+
+            try:
+                delivered = await sender(
+                    row.node_id, row.action, row.payload,
+                    tenant_id=row.tenant_id, command_id=row.id,
                 )
-            else:
+            except Exception:
+                log.warning("command delivery failed for %s", row.id, exc_info=True)
+                delivered = None
+            if not delivered:
                 await remote_repo.mark_unavailable(
                     session, row, max_attempts=settings.remote_command_max_attempts
                 )
+                await session.commit()
             count += 1
     return count
 

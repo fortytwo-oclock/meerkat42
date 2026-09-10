@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Control Plane",
+  title: "Meerkat42 Infrastructure Dashboard",
   description: "Distributed self-hosted infrastructure control plane",
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

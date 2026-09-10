@@ -11,6 +11,7 @@ type NodeTelemetry struct {
 	NodeID      string             `json:"node_id"`
 	Hostname    string             `json:"hostname"`
 	OS          string             `json:"os"`
+	Arch        string             `json:"arch"`
 	Kernel      string             `json:"kernel"`
 	UptimeSec   uint64             `json:"uptime_sec"`
 	Timestamp   time.Time          `json:"timestamp"`
@@ -81,6 +82,7 @@ type AuthHandshake struct {
 	AuthToken   string `json:"auth_token"`
 	AgentVer    string `json:"agent_version"`
 	Hostname    string `json:"hostname"`
+	Arch        string `json:"arch"`
 	ClientGroup string `json:"client_group,omitempty"`
 }
 

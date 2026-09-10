@@ -103,10 +103,15 @@ async def agent_stream(websocket: WebSocket) -> None:
                 tenant_id=tenant_id,
                 node_id=node_id,
                 hostname=handshake.get("hostname", "unknown"),
+                arch=handshake.get("arch", ""),
                 client_group=identity.group_slug or handshake.get("client_group", "default"),
                 agent_version=handshake.get("agent_version", "1.0.0"),
                 remote_ip=client_ip,
             )
+            # A completed authenticated handshake is positive proof that the
+            # node recovered. Do not wait for the watchdog to infer a state
+            # transition after upsert_handshake has already marked it ONLINE.
+            await alerts_repo.resolve_by_type(session, node_id, "NODE_OFFLINE")
         await bus.publish({"type": "node.connected", "node_id": node_id})
 
         while True:

@@ -21,6 +21,7 @@ def _summary(node, group_slug: str) -> dict:
     return {
         "node_id": node.node_id,
         "hostname": node.hostname,
+        "arch": node.arch,
         "client_group": group_slug,
         "status": node.status.value if hasattr(node.status, "value") else node.status,
         "last_seen": node.last_seen,
@@ -70,6 +71,7 @@ async def get_node(
         "node_id": node.node_id,
         "hostname": node.hostname,
         "os": node.os,
+        "arch": node.arch,
         "kernel": node.kernel,
         "agent_version": node.agent_version,
         "remote_ip": node.remote_ip,

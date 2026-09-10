@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import sys
 import time
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -100,6 +104,52 @@ def main() -> None:
         return next((node for node in nodes if node["node_id"] == args.node_id and node["status"] == "ONLINE"), None)
     wait_for("agent enrollment and telemetry", online_node, 90)
 
+    # Exercise a persisted scalar rule through a later telemetry transaction.
+    # This catches enum/string deserialization mistakes that fresh in-memory
+    # rule objects do not expose.
+    for existing in api.call("GET", "/api/v1/alert-rules")["rules"]:
+        if existing["name"] == "smoke persisted CPU rule" and not existing["is_builtin"]:
+            api.call("DELETE", f"/api/v1/alert-rules/{existing['id']}")
+    threshold_rule = api.call(
+        "POST",
+        "/api/v1/alert-rules",
+        {
+            "name": "smoke persisted CPU rule",
+            "metric": "cpu_usage_pct",
+            "comparator": "gt",
+            "threshold": -1,
+            "duration_sec": 2,
+            "severity": "INFO",
+        },
+    )
+
+    def threshold_firing():
+        rows = api.call("GET", "/api/v1/alerts")["alerts"]
+        return next(
+            (
+                row
+                for row in rows
+                if row["node_id"] == args.node_id
+                and row["type"] == "THRESHOLD_CPU_USAGE_PCT"
+            ),
+            None,
+        )
+
+    assert threshold_firing() is None
+    print("PASS  sustained alert does not fire immediately")
+    wait_for("persisted sustained alert rule evaluation", threshold_firing, 30)
+    api.call(
+        "PATCH",
+        f"/api/v1/alert-rules/{threshold_rule['id']}",
+        {"threshold": 101},
+    )
+
+    def threshold_resolved():
+        return not threshold_firing()
+
+    wait_for("custom alert resolution", threshold_resolved, 30)
+    api.call("DELETE", f"/api/v1/alert-rules/{threshold_rule['id']}")
+
     ping = api.call("POST", f"/api/v1/nodes/{args.node_id}/commands", {"action": "ping", "payload": {}},
                     headers={"Idempotency-Key": "smoke-ping"})
     def ping_done():
@@ -116,7 +166,25 @@ def main() -> None:
         if row["status"] == "ERROR":
             raise RuntimeError(row.get("error"))
         return row if row["status"] == "COMPLETE" and row["file_count"] >= 2 else None
-    wait_for("Vault encryption and ciphertext ingestion", backup_done, 45)
+    completed_backup = wait_for("Vault encryption and ciphertext ingestion", backup_done, 45)
+    backup_document = api.call("GET", f"/api/v1/backups/{completed_backup['id']}")
+    serialized_backup = json.dumps(backup_document)
+    assert "FIXTURE_SECRET" not in serialized_backup
+    key = base64.b64decode(env["VAULT_KEY"])
+    cipher = AESGCM(key)
+    restored: dict[str, bytes] = {}
+    for encrypted in backup_document["files"]:
+        plaintext = cipher.decrypt(
+            base64.b64decode(encrypted["nonce"]),
+            base64.b64decode(encrypted["ciphertext"]),
+            encrypted["path"].encode(),
+        )
+        assert hashlib.sha256(plaintext).hexdigest() == encrypted["sha256"]
+        restored[encrypted["path"]] = plaintext
+    fixture_root = ROOT / "deploy" / "test-fixtures" / "compose"
+    assert restored["docker-compose.yml"] == (fixture_root / "docker-compose.yml").read_bytes()
+    assert restored[".env"] == (fixture_root / ".env").read_bytes()
+    print("PASS  Vault ciphertext-only storage and offline round-trip decryption")
 
     counter = int(time.time()) // 30
     totp = code_at(env["EMERGENCY_TOTP_SECRET"], counter)

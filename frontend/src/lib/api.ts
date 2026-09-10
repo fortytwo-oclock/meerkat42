@@ -3,6 +3,7 @@
 export interface NodeSummary {
   node_id: string;
   hostname: string;
+  arch: string | null;
   client_group: string;
   status: "ONLINE" | "STALE" | "OFFLINE" | "UNKNOWN";
   last_seen: string | null;

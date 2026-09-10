@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from hub.db.base import Base
 from hub.models import ClientGroup, Node, Tenant
 from hub.remote.policy import CommandPolicyError, validate_command
+from hub.remote.dispatcher import dispatch_once
 from hub.repositories import remote
+from hub.config import Settings
 
 
 class RemoteCommandTest(unittest.IsolatedAsyncioTestCase):
@@ -95,6 +97,64 @@ class RemoteCommandTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row.status, "FAILED")
             self.assertIsNone(row.result)
             self.assertIn("exceeded", row.error)
+
+    async def test_dispatch_commits_before_fast_agent_result(self) -> None:
+        async with self.sessions() as session:
+            row = await remote.create(
+                session, tenant_id="tenant-a", node_id="node-a", action="ping",
+                payload={}, requested_by="admin", destructive=False,
+                approval_required=False,
+            )
+            command_id = row.id
+            await session.commit()
+
+        async def immediate_agent_result(node_id, action, payload, **kwargs):
+            async with self.sessions() as agent_session:
+                completed = await remote.complete(
+                    agent_session,
+                    tenant_id=kwargs["tenant_id"],
+                    node_id=node_id,
+                    command_id=kwargs["command_id"],
+                    ok=True,
+                    result={"pong": "ok"},
+                    error=None,
+                    max_result_bytes=1024,
+                )
+                self.assertIsNotNone(completed)
+                await agent_session.commit()
+            return kwargs["command_id"]
+
+        settings = Settings(
+            database_url="sqlite+aiosqlite:///:memory:",
+            remote_commands_enabled=True,
+        )
+        # dispatch_once uses the application session factory, so temporarily
+        # point it at this test's isolated database.
+        from hub.remote import dispatcher
+        original_scope = dispatcher.session_scope
+
+        async def test_scope():
+            async with self.sessions() as session:
+                try:
+                    yield session
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+
+        from contextlib import asynccontextmanager
+        dispatcher.session_scope = asynccontextmanager(test_scope)
+        try:
+            self.assertEqual(
+                await dispatch_once(settings, sender=immediate_agent_result), 1
+            )
+        finally:
+            dispatcher.session_scope = original_scope
+
+        async with self.sessions() as session:
+            completed = await remote.get_for_tenant(session, "tenant-a", command_id)
+            self.assertEqual(completed.status, "SUCCEEDED")
+            self.assertEqual(completed.result, {"pong": "ok"})
 
 
 class RemotePolicyTest(unittest.TestCase):

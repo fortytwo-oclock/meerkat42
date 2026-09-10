@@ -56,6 +56,9 @@ class HubSmokeTest(unittest.TestCase):
         response = self.client.get("/api/v1/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "healthy")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+        self.assertEqual(response.headers["Cross-Origin-Opener-Policy"], "same-origin")
 
     def test_agent_enrollment_token_is_shown_once_and_revocable(self) -> None:
         created = self.client.post(

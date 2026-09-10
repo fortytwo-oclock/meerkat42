@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Area,
@@ -26,7 +27,8 @@ const DIAGNOSTICS = [
   ["recent_errors", "Recent errors"],
 ] as const;
 
-export default function NodeDetailPage({ params }: { params: { id: string } }) {
+export default function NodeDetailPage() {
+  const params = useParams<{ id: string }>();
   const id = decodeURIComponent(params.id);
   const [node, setNode] = useState<any>(null);
   const [cpu, setCpu] = useState<MetricSeries | null>(null);
@@ -116,23 +118,23 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
   }));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-6">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <Link href="/" className="text-sm text-muted-foreground hover:underline">
         ← Fleet
       </Link>
 
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold">{node.hostname}</h1>
-          <p className="text-sm text-muted-foreground">
-            {node.client_group} · {node.os ?? "?"} · {node.kernel ?? "?"} · agent{" "}
+          <p className="break-words text-sm text-muted-foreground">
+            {node.client_group} · {node.os ?? "?"} {node.arch ?? "?"} · {node.kernel ?? "?"} · agent{" "}
             {node.agent_version ?? "?"}
           </p>
         </div>
         <StatusBadge status={node.status} />
       </header>
 
-      <Card>
+      <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>CPU / RAM</CardTitle>
           <div className="flex gap-1">
@@ -167,24 +169,24 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      <div className="grid min-w-0 gap-4 md:grid-cols-2">
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Containers ({(t.containers ?? []).length})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {(t.containers ?? []).map((c: any) => (
-              <div key={c.id ?? c.name} className="rounded-md border p-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{c.name}</span>
-                  <div className="flex items-center gap-1">
+              <div key={c.id ?? c.name} className="min-w-0 rounded-md border p-2 text-sm">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-all font-medium">{c.name}</span>
+                  <div className="flex flex-wrap items-center gap-1">
                     {c.update_available && <Badge variant="warning">update available</Badge>}
                     <Badge variant={c.is_crash_loop ? "destructive" : "secondary"}>
                       {c.state}
                     </Badge>
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="break-all text-xs text-muted-foreground">
                   {c.image} · {c.status} · restarts {c.restart_count ?? 0}
                 </div>
                 {c.update_check_status && c.update_check_status !== "DISABLED" && (
@@ -222,7 +224,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>ZFS pools ({(t.zfs ?? []).length})</CardTitle>
           </CardHeader>
@@ -248,7 +250,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
         </Card>
 
         {backups !== null && (
-          <Card className="md:col-span-2">
+          <Card className="min-w-0 md:col-span-2">
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>Infrastructure Vault</CardTitle>
               <Button
@@ -276,11 +278,11 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
                 </p>
               )}
               {backups.map((b) => (
-                <div key={b.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                  <span>
+                <div key={b.id} className="flex min-w-0 flex-col gap-2 rounded-md border p-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 break-words">
                     {new Date(b.requested_at).toLocaleString()} · {b.requested_by}
                   </span>
-                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex min-w-0 flex-wrap items-center gap-2 break-all text-xs text-muted-foreground">
                     {b.status === "COMPLETE"
                       ? `${b.file_count} file(s), ${b.total_bytes} B · key ${b.key_fingerprint}`
                       : b.status === "ERROR"
@@ -309,7 +311,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
         )}
 
         {commands !== null && (
-          <Card className="md:col-span-2">
+          <Card className="min-w-0 md:col-span-2">
             <CardHeader className="flex-row items-center justify-between">
               <CardTitle>Remote actions</CardTitle>
               <Button
@@ -335,11 +337,11 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
                 <p className="text-sm text-muted-foreground">No remote actions recorded.</p>
               )}
               {commands.map((command) => (
-                <div key={command.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                  <span>
+                <div key={command.id} className="flex min-w-0 flex-col gap-2 rounded-md border p-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 break-words">
                     {command.action} · {new Date(command.created_at).toLocaleString()} · {command.requested_by}
                   </span>
-                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex min-w-0 flex-wrap items-center gap-2 break-words text-xs text-muted-foreground">
                     {command.error ?? (command.attempts ? `${command.attempts} attempt(s)` : "waiting")}
                     {command.status === "AWAITING_APPROVAL" && (
                       <Button
@@ -380,7 +382,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
         )}
 
         {emergencyEnabled && commands !== null && (
-          <Card className="md:col-span-2">
+          <Card className="min-w-0 md:col-span-2">
             <CardHeader>
               <CardTitle>Break-glass diagnostics</CardTitle>
             </CardHeader>
@@ -388,6 +390,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
               {!emergencyGrant ? (
                 <div className="flex max-w-sm gap-2">
                   <Input
+                    aria-label="Six-digit TOTP code"
                     inputMode="numeric"
                     maxLength={6}
                     placeholder="6-digit TOTP"
@@ -437,7 +440,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
                 .filter((command) => command.action === "diagnostic_run" && command.status === "SUCCEEDED")
                 .slice(0, 1)
                 .map((command) => (
-                  <pre key={command.id} className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">
+                  <pre key={command.id} className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
                     {String(command.result?.output ?? "No output")}
                   </pre>
                 ))}
@@ -449,7 +452,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
         )}
 
         {(t.proxmox_guests ?? []).length > 0 && (
-          <Card className="md:col-span-2">
+          <Card className="min-w-0 md:col-span-2">
             <CardHeader>
               <CardTitle>Proxmox guests ({t.proxmox_guests.length})</CardTitle>
             </CardHeader>
@@ -481,7 +484,7 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
           </Card>
         )}
 
-        <Card className="md:col-span-2">
+        <Card className="min-w-0 md:col-span-2">
           <CardHeader>
             <CardTitle>Disks ({(t.disks ?? []).length})</CardTitle>
           </CardHeader>
@@ -489,9 +492,9 @@ export default function NodeDetailPage({ params }: { params: { id: string } }) {
             {(t.disks ?? []).map((d: any) => (
               <div
                 key={d.device_name}
-                className="flex items-center justify-between rounded-md border p-2 text-sm"
+                className="flex min-w-0 flex-col gap-2 rounded-md border p-2 text-sm sm:flex-row sm:items-center sm:justify-between"
               >
-                <span>
+                <span className="min-w-0 break-all">
                   {d.device_name} · {d.model} · SN {d.serial}
                 </span>
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
