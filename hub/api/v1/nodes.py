@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
-from hub.deps import get_metric_store, get_tenant_id, viewer_scope
+from hub.deps import Principal, get_metric_store, get_tenant_id, require_admin, viewer_scope
+from hub.models.node import NodeStatus
 from hub.repositories import groups as groups_repo
 from hub.repositories import nodes as nodes_repo
+from hub.repositories import remote as remote_repo
 from hub.timeseries import MetricStore
 from hub.timeseries.base import extract_scalars
 
@@ -83,6 +85,42 @@ async def get_node(
         "labels": node.labels,
         "latest_telemetry": node.last_telemetry,
     }
+
+
+@router.delete("/nodes/{node_id}")
+async def delete_node(
+    node_id: str,
+    session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+    principal: Principal = Depends(require_admin),
+) -> dict:
+    """Forget a retired node and its stored history.
+
+    Online and stale nodes are rejected so a transient disconnect cannot turn
+    into accidental data loss. If a deleted node's agent connects again, its
+    handshake registers the node as new.
+    """
+    node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    status_value = node.status.value if hasattr(node.status, "value") else node.status
+    if status_value not in {NodeStatus.OFFLINE.value, NodeStatus.UNKNOWN.value}:
+        raise HTTPException(
+            status_code=409,
+            detail="Node must be offline before it can be forgotten",
+        )
+    await remote_repo.append_audit(
+        session,
+        tenant_id=tenant_id,
+        actor=principal.label,
+        action="node.deleted",
+        target_type="node",
+        target_id=node.node_id,
+        details={"hostname": node.hostname, "status": status_value},
+    )
+    await nodes_repo.delete(session, node)
+    await session.commit()
+    return {"deleted": node_id}
 
 
 @router.get("/nodes/{node_id}/metrics")

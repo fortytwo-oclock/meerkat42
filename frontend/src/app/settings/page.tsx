@@ -17,6 +17,7 @@ import {
   type BillingSubscription,
   type Channel,
   type IssuedBillingLicense,
+  type NodeSummary,
 } from "@/lib/api";
 
 const KIND_HINT: Record<string, string> = {
@@ -37,6 +38,10 @@ export default function SettingsPage() {
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [checkoutEmail, setCheckoutEmail] = useState("");
   const [issuedLicense, setIssuedLicense] = useState<IssuedBillingLicense | null>(null);
+  const [nodes, setNodes] = useState<NodeSummary[] | null>(null);
+  const [confirmingNode, setConfirmingNode] = useState<string | null>(null);
+  const [forgettingNode, setForgettingNode] = useState<string | null>(null);
+  const [nodeMsg, setNodeMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [token, setToken] = useState("");
 
@@ -74,6 +79,11 @@ export default function SettingsPage() {
       setBillingPlans((await api.billingPlans()).plans);
     } catch {
       setBillingPlans([]);
+    }
+    try {
+      setNodes((await api.nodes()).nodes);
+    } catch {
+      setNodes(null);
     }
   }, []);
 
@@ -121,6 +131,105 @@ export default function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {nodes !== null && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Retired nodes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Forget machines that have been permanently removed. Online and reconnecting
+              nodes cannot be deleted.
+            </p>
+            {nodeMsg && (
+              <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+                {nodeMsg}
+              </p>
+            )}
+            {nodes.filter((node) => ["OFFLINE", "UNKNOWN"].includes(node.status)).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No retired nodes to clean up.</p>
+            ) : (
+              nodes
+                .filter((node) => ["OFFLINE", "UNKNOWN"].includes(node.status))
+                .map((node) => (
+                  <div key={node.node_id} className="rounded-md border p-3">
+                    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium">{node.hostname}</p>
+                        <p className="break-all text-xs text-muted-foreground">
+                          {node.node_id} · last seen {node.last_seen ? new Date(node.last_seen).toLocaleString() : "never"}
+                        </p>
+                      </div>
+                      {confirmingNode !== node.node_id && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            setConfirmingNode(node.node_id);
+                            setNodeMsg(null);
+                          }}
+                        >
+                          Forget node
+                        </Button>
+                      )}
+                    </div>
+                    {confirmingNode === node.node_id && (
+                      <div
+                        role="group"
+                        aria-label={`Confirm removal of ${node.hostname}`}
+                        className="mt-3 space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3"
+                      >
+                        <p>
+                          This permanently deletes stored telemetry, alerts, Vault backups,
+                          and remote-command history for <strong>{node.hostname}</strong>.
+                          A running agent will register itself again.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={forgettingNode === node.node_id}
+                            onClick={async () => {
+                              setForgettingNode(node.node_id);
+                              setNodeMsg(null);
+                              try {
+                                await api.deleteNode(node.node_id);
+                                setNodes((current) =>
+                                  current?.filter((item) => item.node_id !== node.node_id) ?? null,
+                                );
+                                setConfirmingNode(null);
+                                setNodeMsg(`${node.hostname} was forgotten.`);
+                                setErr(null);
+                              } catch (e: any) {
+                                setErr(e.message);
+                              } finally {
+                                setForgettingNode(null);
+                              }
+                            }}
+                          >
+                            {forgettingNode === node.node_id ? "Forgetting…" : "Delete stored node"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={forgettingNode === node.node_id}
+                            onClick={() => setConfirmingNode(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+            )}
+            <p className="text-xs text-muted-foreground">
+              Stop and uninstall the agent first if the machine still exists.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {(billing || billingPlans.length > 0) && (
         <Card>

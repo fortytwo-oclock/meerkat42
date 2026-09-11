@@ -217,6 +217,10 @@ export const api = {
       `/api/v1/nodes${group ? `?client_group=${encodeURIComponent(group)}` : ""}`,
     ),
   node: (id: string) => j<any>(`/api/v1/nodes/${encodeURIComponent(id)}`),
+  deleteNode: (id: string) =>
+    j<{ deleted: string }>(`/api/v1/nodes/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   nodeMetrics: (id: string, metric: string, rangeHours = 6) =>
     j<MetricSeries>(
       `/api/v1/nodes/${encodeURIComponent(id)}/metrics?metric=${metric}&range_hours=${rangeHours}`,

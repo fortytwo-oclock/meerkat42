@@ -61,6 +61,12 @@ async def count_for_tenant(session: AsyncSession, tenant_id: str) -> int:
     return len(rows.all())
 
 
+async def delete(session: AsyncSession, node: Node) -> None:
+    """Delete a retired node and its database-backed history via FK cascades."""
+    await session.delete(node)
+    await session.flush()
+
+
 async def existing_ids_for_tenant(session: AsyncSession, tenant_id: str) -> set[str]:
     rows = await session.execute(
         select(Node.node_id)
