@@ -276,7 +276,7 @@ export default function NodeDetailPage() {
                       : ""}
                   </div>
                 )}
-                {commands !== null && (
+                {commands !== null && !String(c.name).includes("meerkat42-agent") && (
                   <div className="mt-3 space-y-2">
                     <div className="flex flex-wrap gap-2" role="group" aria-label={`Actions for ${c.name}`}>
                       {c.state === "running" && !String(c.image).startsWith("sha256:") && (
@@ -356,6 +356,11 @@ export default function NodeDetailPage() {
                       </div>
                     )}
                   </div>
+                )}
+                {commands !== null && String(c.name).includes("meerkat42-agent") && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Agent lifecycle controls are hidden to prevent remote lockout.
+                  </p>
                 )}
               </div>
             ))}

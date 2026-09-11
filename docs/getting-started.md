@@ -86,6 +86,10 @@ Docker names to the agent environment and recreate the agent:
 DOCKER_ACTION_CONTAINERS=web,worker,reverse-proxy
 ```
 
+On a trusted test host where every container should be manageable, set
+`DOCKER_ACTION_CONTAINERS=*`. This is an explicit broad-access mode; keep exact
+container names on shared or production hosts.
+
 An empty or missing allowlist disables Update, Restart, and Stop at the agent,
 even if a Hub administrator requests them. Update pulls the container's current
 image tag, recreates it with its existing Docker configuration, and starts the

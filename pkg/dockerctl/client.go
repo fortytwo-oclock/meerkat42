@@ -22,11 +22,12 @@ var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$`)
 var containerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 type Client struct {
-	base              string
-	http              *http.Client
-	allowed           map[string]struct{}
-	allowedContainers map[string]struct{}
-	auth              map[string]json.RawMessage
+	base               string
+	http               *http.Client
+	allowed            map[string]struct{}
+	allowedContainers  map[string]struct{}
+	allowAllContainers bool
+	auth               map[string]json.RawMessage
 }
 
 func NewFromEnv() (*Client, error) {
@@ -45,16 +46,22 @@ func NewFromEnv() (*Client, error) {
 		return nil, err
 	}
 	allowedContainers := make(map[string]struct{})
+	allowAllContainers := false
 	for _, value := range strings.Split(os.Getenv("DOCKER_ACTION_CONTAINERS"), ",") {
 		if value = strings.TrimSpace(value); value != "" {
-			allowedContainers[value] = struct{}{}
+			if value == "*" {
+				allowAllContainers = true
+			} else {
+				allowedContainers[value] = struct{}{}
+			}
 		}
 	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", "/var/run/docker.sock")
 	}}
 	return &Client{
-		base: "http://localhost", allowed: allowed, allowedContainers: allowedContainers, auth: auth,
+		base: "http://localhost", allowed: allowed, allowedContainers: allowedContainers,
+		allowAllContainers: allowAllContainers, auth: auth,
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Minute},
 	}, nil
 }
@@ -63,7 +70,7 @@ func (c *Client) validateContainer(name string) error {
 	if !containerPattern.MatchString(name) {
 		return errors.New("invalid container name")
 	}
-	if _, ok := c.allowedContainers[name]; !ok {
+	if _, ok := c.allowedContainers[name]; !ok && !c.allowAllContainers {
 		return errors.New("container is not allowlisted for remote actions")
 	}
 	return nil

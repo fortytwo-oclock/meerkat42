@@ -69,6 +69,25 @@ func TestContainerActionsRequireExactAllowlist(t *testing.T) {
 	}
 }
 
+func TestContainerActionsAllowExplicitWildcard(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := &Client{
+		base: server.URL, http: server.Client(),
+		allowedContainers: map[string]struct{}{}, allowAllContainers: true,
+	}
+	if _, err := client.Restart("any-valid-container"); err != nil || requests != 1 {
+		t.Fatalf("wildcard restart failed: requests=%d err=%v", requests, err)
+	}
+	if _, err := client.Stop("../invalid"); err == nil || requests != 1 {
+		t.Fatalf("invalid name reached Docker: requests=%d err=%v", requests, err)
+	}
+}
+
 func TestUpdateAndRecreateKeepsOriginalUntilReplacementStarts(t *testing.T) {
 	var events []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
