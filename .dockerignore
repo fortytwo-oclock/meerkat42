@@ -16,3 +16,4 @@ deploy/test.env
 deploy/test-license.txt
 deploy/test-totp-uri.txt
 deploy/*.env
+deploy/test-fixtures
