@@ -83,6 +83,25 @@ func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.
 				return nil, err
 			}
 			return map[string]string{"image": image, "status": status}, nil
+		case "docker_restart_container", "docker_stop_container":
+			if dockerClient == nil {
+				return nil, fmt.Errorf("Docker remote management is not configured on this agent")
+			}
+			container, ok := payload["container"].(string)
+			if !ok {
+				return nil, fmt.Errorf("container is required")
+			}
+			var status string
+			var err error
+			if action == "docker_restart_container" {
+				status, err = dockerClient.Restart(container)
+			} else {
+				status, err = dockerClient.Stop(container)
+			}
+			if err != nil {
+				return nil, err
+			}
+			return map[string]string{"container": container, "status": status}, nil
 		case "diagnostic_run":
 			if len(payload) != 1 {
 				return nil, fmt.Errorf("diagnostic payload has unexpected fields")

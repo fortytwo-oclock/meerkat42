@@ -45,3 +45,25 @@ func TestPullRejectsUnlistedAndPinnedImagesBeforeNetwork(t *testing.T) {
 		}
 	}
 }
+
+func TestContainerActionsRequireExactAllowlist(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodPost || r.URL.Path != "/containers/api-1/restart" || r.URL.Query().Get("t") != "10" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := &Client{
+		base: server.URL, http: server.Client(),
+		allowedContainers: map[string]struct{}{"api-1": {}},
+	}
+	if _, err := client.Restart("api-1"); err != nil || requests != 1 {
+		t.Fatalf("restart failed: requests=%d err=%v", requests, err)
+	}
+	if _, err := client.Stop("db-1"); err == nil || requests != 1 {
+		t.Fatalf("unlisted container reached Docker: requests=%d err=%v", requests, err)
+	}
+}

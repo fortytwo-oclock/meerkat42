@@ -19,12 +19,14 @@ import (
 )
 
 var imagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$`)
+var containerPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 type Client struct {
-	base    string
-	http    *http.Client
-	allowed map[string]struct{}
-	auth    map[string]json.RawMessage
+	base              string
+	http              *http.Client
+	allowed           map[string]struct{}
+	allowedContainers map[string]struct{}
+	auth              map[string]json.RawMessage
 }
 
 func NewFromEnv() (*Client, error) {
@@ -42,13 +44,59 @@ func NewFromEnv() (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	allowedContainers := make(map[string]struct{})
+	for _, value := range strings.Split(os.Getenv("DOCKER_ACTION_CONTAINERS"), ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			allowedContainers[value] = struct{}{}
+		}
+	}
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", "/var/run/docker.sock")
 	}}
 	return &Client{
-		base: "http://localhost", allowed: allowed, auth: auth,
+		base: "http://localhost", allowed: allowed, allowedContainers: allowedContainers, auth: auth,
 		http: &http.Client{Transport: transport, Timeout: 15 * time.Minute},
 	}, nil
+}
+
+func (c *Client) validateContainer(name string) error {
+	if !containerPattern.MatchString(name) {
+		return errors.New("invalid container name")
+	}
+	if _, ok := c.allowedContainers[name]; !ok {
+		return errors.New("container is not allowlisted for remote actions")
+	}
+	return nil
+}
+
+func (c *Client) containerAction(name, action string, timeoutSeconds int) (string, error) {
+	if err := c.validateContainer(name); err != nil {
+		return "", err
+	}
+	target := fmt.Sprintf("%s/containers/%s/%s?t=%d", c.base, url.PathEscape(name), action, timeoutSeconds)
+	req, _ := http.NewRequest(http.MethodPost, target, nil)
+	response, err := c.http.Do(req)
+	if err != nil {
+		return "", errors.New("Docker Engine is unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotModified && action == "stop" {
+		return "already stopped", nil
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", fmt.Errorf("Docker container %s returned HTTP %d", action, response.StatusCode)
+	}
+	return action + " requested", nil
+}
+
+// Restart restarts one explicitly allowlisted container with a bounded grace period.
+func (c *Client) Restart(name string) (string, error) {
+	return c.containerAction(name, "restart", 10)
+}
+
+// Stop gracefully stops one explicitly allowlisted container.
+func (c *Client) Stop(name string) (string, error) {
+	return c.containerAction(name, "stop", 30)
 }
 
 func loadAuth(filename string) (map[string]json.RawMessage, error) {

@@ -40,6 +40,11 @@ export default function NodeDetailPage() {
   const [vaultMsg, setVaultMsg] = useState<string | null>(null);
   const [commands, setCommands] = useState<RemoteCommand[] | null>(null);
   const [commandMsg, setCommandMsg] = useState<string | null>(null);
+  const [pendingContainerAction, setPendingContainerAction] = useState<{
+    container: string;
+    action: "restart" | "stop";
+  } | null>(null);
+  const [containerActionBusy, setContainerActionBusy] = useState<string | null>(null);
   const [emergencyEnabled, setEmergencyEnabled] = useState(false);
   const [totp, setTotp] = useState("");
   const [emergencyGrant, setEmergencyGrant] = useState<string | null>(null);
@@ -131,6 +136,36 @@ export default function NodeDetailPage() {
       await loadCommands();
     } catch (e: any) {
       setCommandMsg(e.message);
+    }
+  };
+  const queueContainerAction = async (
+    action: "docker_pull_image" | "docker_restart_container" | "docker_stop_container",
+    container: any,
+  ) => {
+    const busyKey = `${container.name}:${action}`;
+    setCommandMsg(null);
+    setContainerActionBusy(busyKey);
+    try {
+      const payload = action === "docker_pull_image"
+        ? { image: container.image }
+        : { container: container.name };
+      const created = await api.createCommand(id, action, payload);
+      const verb = action === "docker_pull_image"
+        ? "Image pull"
+        : action === "docker_restart_container"
+          ? "Restart"
+          : "Stop";
+      setCommandMsg(
+        created.status === "AWAITING_APPROVAL"
+          ? `${verb} for ${container.name} awaits a second owner's approval.`
+          : `${verb} queued for ${container.name}.`,
+      );
+      setPendingContainerAction(null);
+      await loadCommands();
+    } catch (error) {
+      setCommandMsg(error instanceof Error ? error.message : "Container action failed");
+    } finally {
+      setContainerActionBusy(null);
     }
   };
   const chartData = (cpu?.points ?? []).map((p, i) => ({
@@ -227,24 +262,85 @@ export default function NodeDetailPage() {
                       : ""}
                   </div>
                 )}
-                {c.update_available && commands !== null && (
-                  <Button
-                    className="mt-2"
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      setCommandMsg(null);
-                      try {
-                        await api.createCommand(id, "docker_pull_image", { image: c.image });
-                        setCommandMsg(`Pull queued for ${c.image}. Running containers will not be restarted.`);
-                        await loadCommands();
-                      } catch (e: any) {
-                        setCommandMsg(e.message);
-                      }
-                    }}
-                  >
-                    Pull image
-                  </Button>
+                {commands !== null && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap gap-2" role="group" aria-label={`Actions for ${c.name}`}>
+                      {c.state === "running" && !String(c.image).startsWith("sha256:") && (
+                        <Button
+                          className="min-h-11"
+                          size="sm"
+                          variant="outline"
+                          disabled={containerActionBusy !== null}
+                          onClick={() => queueContainerAction("docker_pull_image", c)}
+                        >
+                          {containerActionBusy === `${c.name}:docker_pull_image` ? "Queuing…" : "Pull update"}
+                        </Button>
+                      )}
+                      <Button
+                        className="min-h-11"
+                        size="sm"
+                        variant="outline"
+                        disabled={containerActionBusy !== null}
+                        onClick={() => setPendingContainerAction({ container: c.name, action: "restart" })}
+                      >
+                        Restart
+                      </Button>
+                      {c.state === "running" && (
+                        <Button
+                          className="min-h-11"
+                          size="sm"
+                          variant="destructive"
+                          disabled={containerActionBusy !== null}
+                          onClick={() => setPendingContainerAction({ container: c.name, action: "stop" })}
+                        >
+                          Stop
+                        </Button>
+                      )}
+                    </div>
+                    {pendingContainerAction?.container === c.name && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3" role="alert">
+                        <p className="text-xs">
+                          {pendingContainerAction?.action === "stop"
+                            ? `Stop ${c.name}? Its service will remain unavailable until it is started again.`
+                            : `Restart ${c.name}? Its service may be briefly unavailable.`}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            className="min-h-11"
+                            size="sm"
+                            variant="destructive"
+                            disabled={containerActionBusy !== null}
+                            onClick={() => {
+                              const action = pendingContainerAction?.action;
+                              if (!action) return;
+                              queueContainerAction(
+                                action === "stop"
+                                  ? "docker_stop_container"
+                                  : "docker_restart_container",
+                                c,
+                              );
+                            }}
+                          >
+                            {containerActionBusy
+                              ? "Queuing…"
+                              : `Confirm ${pendingContainerAction?.action ?? "action"}`}
+                          </Button>
+                          <Button
+                            className="min-h-11"
+                            size="sm"
+                            variant="outline"
+                            disabled={containerActionBusy !== null}
+                            onClick={() => setPendingContainerAction(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Pull update downloads the image only; recreate the service through Compose to apply it.
+                    </p>
+                  </div>
                 )}
               </div>
             ))}

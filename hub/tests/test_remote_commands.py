@@ -187,6 +187,16 @@ class RemotePolicyTest(unittest.TestCase):
         with self.assertRaises(CommandPolicyError):
             validate_command("docker_pull_image", {"image": "app@sha256:abc"})
 
+    def test_docker_container_actions_are_strict_and_destructive(self) -> None:
+        for action in ("docker_restart_container", "docker_stop_container"):
+            policy, payload = validate_command(action, {"container": "api-1"})
+            self.assertTrue(policy.destructive)
+            self.assertEqual(payload, {"container": "api-1"})
+        with self.assertRaises(CommandPolicyError):
+            validate_command("docker_stop_container", {"container": "../api"})
+        with self.assertRaises(CommandPolicyError):
+            validate_command("docker_restart_container", {"container": "api", "force": True})
+
     def test_diagnostics_are_fixed_and_emergency_only(self) -> None:
         policy, payload = validate_command(
             "diagnostic_run", {"diagnostic": "failed_services"}

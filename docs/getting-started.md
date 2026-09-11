@@ -79,6 +79,19 @@ The agent publishes no inbound ports. It mounts the host's `/proc`, `/sys`, and
 Docker socket read-only so it can collect host and container telemetry. The node
 should appear in the dashboard within 30 seconds.
 
+To allow audited container controls for selected services, add their exact
+Docker names to the agent environment and recreate the agent:
+
+```dotenv
+DOCKER_ACTION_CONTAINERS=web,worker,reverse-proxy
+```
+
+An empty or missing allowlist disables Restart and Stop at the agent, even if a
+Hub administrator requests them. Image updates are pull-only: Meerkat42 does
+not recreate a Compose service automatically because doing so without its
+deployment file can lose service configuration. Restart and Stop are recorded
+as destructive commands and follow the Hub's approval policy.
+
 For production enrollment, create a group-bound, expiring agent token in
 **Settings** and use the returned one-time `cpa_...` value instead of sharing the
 bootstrap token with additional nodes.
