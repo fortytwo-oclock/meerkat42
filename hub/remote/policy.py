@@ -24,6 +24,7 @@ def _empty(payload: dict) -> dict:
 
 
 _NODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+_CONTAINER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 
 def _proxmox_guest(payload: dict) -> dict:
@@ -60,7 +61,7 @@ def _docker_container(payload: dict) -> dict:
     if set(payload) != {"container"}:
         raise CommandPolicyError("Docker container action requires only container")
     container = payload.get("container")
-    if not isinstance(container, str) or not _NODE.fullmatch(container):
+    if not isinstance(container, str) or not _CONTAINER.fullmatch(container):
         raise CommandPolicyError("invalid container name")
     return {"container": container}
 
@@ -88,6 +89,9 @@ POLICIES: dict[str, CommandPolicy] = {
     ),
     "docker_stop_container": CommandPolicy(
         destructive=True, validate=_docker_container, timeout_seconds=90
+    ),
+    "docker_update_container": CommandPolicy(
+        destructive=True, validate=_docker_container, timeout_seconds=900
     ),
     "diagnostic_run": CommandPolicy(
         destructive=False, validate=_diagnostic, timeout_seconds=30, emergency=True

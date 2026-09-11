@@ -42,7 +42,7 @@ export default function NodeDetailPage() {
   const [commandMsg, setCommandMsg] = useState<string | null>(null);
   const [pendingContainerAction, setPendingContainerAction] = useState<{
     container: string;
-    action: "restart" | "stop";
+    action: "update" | "restart" | "stop";
   } | null>(null);
   const [containerActionBusy, setContainerActionBusy] = useState<string | null>(null);
   const [emergencyEnabled, setEmergencyEnabled] = useState(false);
@@ -139,19 +139,17 @@ export default function NodeDetailPage() {
     }
   };
   const queueContainerAction = async (
-    action: "docker_pull_image" | "docker_restart_container" | "docker_stop_container",
+    action: "docker_update_container" | "docker_restart_container" | "docker_stop_container",
     container: any,
   ) => {
     const busyKey = `${container.name}:${action}`;
     setCommandMsg(null);
     setContainerActionBusy(busyKey);
     try {
-      const payload = action === "docker_pull_image"
-        ? { image: container.image }
-        : { container: container.name };
+      const payload = { container: container.name };
       const created = await api.createCommand(id, action, payload);
-      const verb = action === "docker_pull_image"
-        ? "Image pull"
+      const verb = action === "docker_update_container"
+        ? "Update"
         : action === "docker_restart_container"
           ? "Restart"
           : "Stop";
@@ -271,9 +269,9 @@ export default function NodeDetailPage() {
                           size="sm"
                           variant="outline"
                           disabled={containerActionBusy !== null}
-                          onClick={() => queueContainerAction("docker_pull_image", c)}
+                          onClick={() => setPendingContainerAction({ container: c.name, action: "update" })}
                         >
-                          {containerActionBusy === `${c.name}:docker_pull_image` ? "Queuing…" : "Pull update"}
+                          Update
                         </Button>
                       )}
                       <Button
@@ -302,7 +300,9 @@ export default function NodeDetailPage() {
                         <p className="text-xs">
                           {pendingContainerAction?.action === "stop"
                             ? `Stop ${c.name}? Its service will remain unavailable until it is started again.`
-                            : `Restart ${c.name}? Its service may be briefly unavailable.`}
+                            : pendingContainerAction?.action === "update"
+                              ? `Update ${c.name}? Meerkat42 will pull its image, recreate the container, and roll back automatically if startup fails.`
+                              : `Restart ${c.name}? Its service may be briefly unavailable.`}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Button
@@ -316,7 +316,9 @@ export default function NodeDetailPage() {
                               queueContainerAction(
                                 action === "stop"
                                   ? "docker_stop_container"
-                                  : "docker_restart_container",
+                                  : action === "update"
+                                    ? "docker_update_container"
+                                    : "docker_restart_container",
                                 c,
                               );
                             }}
@@ -337,9 +339,6 @@ export default function NodeDetailPage() {
                         </div>
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      Pull update downloads the image only; recreate the service through Compose to apply it.
-                    </p>
                   </div>
                 )}
               </div>

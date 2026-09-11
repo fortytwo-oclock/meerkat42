@@ -83,7 +83,7 @@ func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.
 				return nil, err
 			}
 			return map[string]string{"image": image, "status": status}, nil
-		case "docker_restart_container", "docker_stop_container":
+		case "docker_restart_container", "docker_stop_container", "docker_update_container":
 			if dockerClient == nil {
 				return nil, fmt.Errorf("Docker remote management is not configured on this agent")
 			}
@@ -95,6 +95,8 @@ func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.
 			var err error
 			if action == "docker_restart_container" {
 				status, err = dockerClient.Restart(container)
+			} else if action == "docker_update_container" {
+				status, err = dockerClient.UpdateAndRecreate(container)
 			} else {
 				status, err = dockerClient.Stop(container)
 			}

@@ -99,6 +99,232 @@ func (c *Client) Stop(name string) (string, error) {
 	return c.containerAction(name, "stop", 30)
 }
 
+type inspectedContainer struct {
+	ID         string                 `json:"Id"`
+	Name       string                 `json:"Name"`
+	Config     map[string]interface{} `json:"Config"`
+	HostConfig map[string]interface{} `json:"HostConfig"`
+	State      struct {
+		Running bool `json:"Running"`
+		Health  *struct {
+			Status string `json:"Status"`
+		} `json:"Health"`
+	} `json:"State"`
+	NetworkSettings struct {
+		Networks map[string]struct {
+			IPAMConfig map[string]interface{} `json:"IPAMConfig"`
+			Links      []string               `json:"Links"`
+			Aliases    []string               `json:"Aliases"`
+			DriverOpts map[string]string      `json:"DriverOpts"`
+			MacAddress string                 `json:"MacAddress"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
+}
+
+func (c *Client) waitForReplacement(id string, hasHealthcheck bool) error {
+	deadline := time.Now().Add(60 * time.Second)
+	stableChecks := 0
+	for time.Now().Before(deadline) {
+		response, err := c.engineRequest(http.MethodGet, "/containers/"+url.PathEscape(id)+"/json", nil)
+		if err != nil {
+			return err
+		}
+		if response.StatusCode != http.StatusOK {
+			response.Body.Close()
+			return fmt.Errorf("replacement inspection returned HTTP %d", response.StatusCode)
+		}
+		var replacement inspectedContainer
+		decodeErr := json.NewDecoder(io.LimitReader(response.Body, 4*1024*1024)).Decode(&replacement)
+		response.Body.Close()
+		if decodeErr != nil {
+			return errors.New("replacement inspection was invalid")
+		}
+		if !replacement.State.Running {
+			return errors.New("replacement container exited during startup")
+		}
+		if hasHealthcheck {
+			if replacement.State.Health != nil && replacement.State.Health.Status == "healthy" {
+				return nil
+			}
+			if replacement.State.Health != nil && replacement.State.Health.Status == "unhealthy" {
+				return errors.New("replacement container became unhealthy")
+			}
+		} else {
+			stableChecks++
+			if stableChecks >= 3 {
+				return nil
+			}
+		}
+		time.Sleep(time.Second)
+	}
+	return errors.New("replacement container did not become ready before timeout")
+}
+
+func (c *Client) engineRequest(method, target string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.base+target, body)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	response, err := c.http.Do(req)
+	if err != nil {
+		return nil, errors.New("Docker Engine is unavailable")
+	}
+	return response, nil
+}
+
+func (c *Client) simpleEngineAction(method, target string, accepted ...int) error {
+	response, err := c.engineRequest(method, target, nil)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	for _, status := range accepted {
+		if response.StatusCode == status {
+			return nil
+		}
+	}
+	return fmt.Errorf("Docker Engine returned HTTP %d", response.StatusCode)
+}
+
+// UpdateAndRecreate pulls the configured image tag and replaces one running,
+// allowlisted container while preserving its Docker configuration. The stopped
+// original is retained until the replacement starts, then removed. Any create
+// or start failure attempts to restore and restart the original container.
+func (c *Client) UpdateAndRecreate(name string) (string, error) {
+	if err := c.validateContainer(name); err != nil {
+		return "", err
+	}
+
+	response, err := c.engineRequest(http.MethodGet, "/containers/"+url.PathEscape(name)+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	if response.StatusCode != http.StatusOK {
+		response.Body.Close()
+		return "", fmt.Errorf("Docker container inspect returned HTTP %d", response.StatusCode)
+	}
+	var current inspectedContainer
+	err = json.NewDecoder(io.LimitReader(response.Body, 4*1024*1024)).Decode(&current)
+	response.Body.Close()
+	if err != nil || current.ID == "" || current.Config == nil || current.HostConfig == nil {
+		return "", errors.New("Docker container inspection was invalid")
+	}
+	if !current.State.Running {
+		return "", errors.New("container must be running before it can be updated")
+	}
+	image, ok := current.Config["Image"].(string)
+	if !ok || image == "" {
+		return "", errors.New("container has no updateable image reference")
+	}
+	if _, err := c.Pull(image); err != nil {
+		return "", err
+	}
+
+	if _, err := c.Stop(name); err != nil {
+		return "", err
+	}
+	rollbackName := fmt.Sprintf("%s.meerkat42-rollback-%d", name, time.Now().Unix())
+	if err := c.simpleEngineAction(
+		http.MethodPost,
+		"/containers/"+url.PathEscape(current.ID)+"/rename?name="+url.QueryEscape(rollbackName),
+		http.StatusNoContent,
+	); err != nil {
+		if startErr := c.simpleEngineAction(http.MethodPost, "/containers/"+url.PathEscape(current.ID)+"/start", http.StatusNoContent, http.StatusNotModified); startErr != nil {
+			return "", fmt.Errorf("could not reserve the original container for rollback and could not restart it: %v", startErr)
+		}
+		return "", errors.New("could not reserve the original container for rollback")
+	}
+
+	rollback := func(newID string) error {
+		var failures []string
+		if newID != "" {
+			if err := c.simpleEngineAction(http.MethodDelete, "/containers/"+url.PathEscape(newID)+"?force=1&v=0", http.StatusNoContent, http.StatusNotFound); err != nil {
+				failures = append(failures, "remove replacement: "+err.Error())
+			}
+		}
+		if err := c.simpleEngineAction(
+			http.MethodPost,
+			"/containers/"+url.PathEscape(current.ID)+"/rename?name="+url.QueryEscape(name),
+			http.StatusNoContent,
+		); err != nil {
+			failures = append(failures, "restore original name: "+err.Error())
+		}
+		if err := c.simpleEngineAction(http.MethodPost, "/containers/"+url.PathEscape(current.ID)+"/start", http.StatusNoContent, http.StatusNotModified); err != nil {
+			failures = append(failures, "restart original: "+err.Error())
+		}
+		if len(failures) > 0 {
+			return errors.New(strings.Join(failures, "; "))
+		}
+		return nil
+	}
+	restoreError := func(message string, newID string) error {
+		if rollbackErr := rollback(newID); rollbackErr != nil {
+			return fmt.Errorf("%s; automatic rollback failed: %v", message, rollbackErr)
+		}
+		return errors.New(message + "; original restored")
+	}
+
+	endpoints := make(map[string]interface{}, len(current.NetworkSettings.Networks))
+	for networkName, settings := range current.NetworkSettings.Networks {
+		endpoint := map[string]interface{}{
+			"IPAMConfig": settings.IPAMConfig,
+			"Links":      settings.Links,
+			"Aliases":    settings.Aliases,
+			"DriverOpts": settings.DriverOpts,
+		}
+		if settings.MacAddress != "" {
+			endpoint["MacAddress"] = settings.MacAddress
+		}
+		endpoints[networkName] = endpoint
+	}
+	createBody := make(map[string]interface{}, len(current.Config)+2)
+	for key, value := range current.Config {
+		createBody[key] = value
+	}
+	createBody["HostConfig"] = current.HostConfig
+	createBody["NetworkingConfig"] = map[string]interface{}{"EndpointsConfig": endpoints}
+	body, err := json.Marshal(createBody)
+	if err != nil {
+		return "", restoreError("could not prepare replacement container", "")
+	}
+	response, err = c.engineRequest(
+		http.MethodPost,
+		"/containers/create?name="+url.QueryEscape(name),
+		strings.NewReader(string(body)),
+	)
+	if err != nil {
+		return "", restoreError(err.Error(), "")
+	}
+	var created struct {
+		ID string `json:"Id"`
+	}
+	decodeErr := json.NewDecoder(io.LimitReader(response.Body, 1024*1024)).Decode(&created)
+	createStatus := response.StatusCode
+	response.Body.Close()
+	if createStatus < 200 || createStatus >= 300 || decodeErr != nil || created.ID == "" {
+		return "", restoreError(fmt.Sprintf("replacement container creation failed with HTTP %d", createStatus), created.ID)
+	}
+	if err := c.simpleEngineAction(http.MethodPost, "/containers/"+url.PathEscape(created.ID)+"/start", http.StatusNoContent, http.StatusNotModified); err != nil {
+		return "", restoreError("replacement container did not start", created.ID)
+	}
+	hasHealthcheck := false
+	if rawHealthcheck, ok := current.Config["Healthcheck"].(map[string]interface{}); ok {
+		if test, ok := rawHealthcheck["Test"].([]interface{}); ok && len(test) > 0 {
+			hasHealthcheck = test[0] != "NONE"
+		}
+	}
+	if err := c.waitForReplacement(created.ID, hasHealthcheck); err != nil {
+		return "", restoreError(err.Error(), created.ID)
+	}
+	if err := c.simpleEngineAction(http.MethodDelete, "/containers/"+url.PathEscape(current.ID)+"?force=1&v=0", http.StatusNoContent, http.StatusNotFound); err != nil {
+		return "updated and recreated; stopped rollback container retained as " + rollbackName, nil
+	}
+	return "updated and recreated", nil
+}
+
 func loadAuth(filename string) (map[string]json.RawMessage, error) {
 	result := make(map[string]json.RawMessage)
 	filename = strings.TrimSpace(filename)

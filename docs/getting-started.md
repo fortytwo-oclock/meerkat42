@@ -86,11 +86,12 @@ Docker names to the agent environment and recreate the agent:
 DOCKER_ACTION_CONTAINERS=web,worker,reverse-proxy
 ```
 
-An empty or missing allowlist disables Restart and Stop at the agent, even if a
-Hub administrator requests them. Image updates are pull-only: Meerkat42 does
-not recreate a Compose service automatically because doing so without its
-deployment file can lose service configuration. Restart and Stop are recorded
-as destructive commands and follow the Hub's approval policy.
+An empty or missing allowlist disables Update, Restart, and Stop at the agent,
+even if a Hub administrator requests them. Update pulls the container's current
+image tag, recreates it with its existing Docker configuration, and starts the
+replacement. The stopped original is kept until startup succeeds and is
+automatically restored if creation or startup fails. These lifecycle operations
+are recorded as destructive commands and follow the Hub's approval policy.
 
 For production enrollment, create a group-bound, expiring agent token in
 **Settings** and use the returned one-time `cpa_...` value instead of sharing the

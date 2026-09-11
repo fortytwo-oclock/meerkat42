@@ -188,7 +188,9 @@ class RemotePolicyTest(unittest.TestCase):
             validate_command("docker_pull_image", {"image": "app@sha256:abc"})
 
     def test_docker_container_actions_are_strict_and_destructive(self) -> None:
-        for action in ("docker_restart_container", "docker_stop_container"):
+        for action in (
+            "docker_restart_container", "docker_stop_container", "docker_update_container"
+        ):
             policy, payload = validate_command(action, {"container": "api-1"})
             self.assertTrue(policy.destructive)
             self.assertEqual(payload, {"container": "api-1"})
