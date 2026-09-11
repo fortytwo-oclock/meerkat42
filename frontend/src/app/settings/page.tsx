@@ -50,6 +50,11 @@ export default function SettingsPage() {
   const [kind, setKind] = useState<Channel["kind"]>("discord");
   const [config, setConfig] = useState("");
   const [minSev, setMinSev] = useState("WARNING");
+  const [channelBusy, setChannelBusy] = useState<string | null>(null);
+  const [channelNotice, setChannelNotice] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +102,70 @@ export default function SettingsPage() {
       await load();
     } catch (e: any) {
       setErr(e.message);
+    }
+  };
+
+  const testNotificationChannel = async (channel: Channel) => {
+    setChannelBusy(channel.id);
+    setChannelNotice(null);
+    setErr(null);
+    try {
+      await api.testChannel(channel.id);
+      await load();
+      setChannelNotice({
+        tone: "success",
+        message: `Test notification delivered through ${channel.name}.`,
+      });
+    } catch (e: any) {
+      await load();
+      setChannelNotice({
+        tone: "error",
+        message: `Test notification failed for ${channel.name}: ${e.message}`,
+      });
+    } finally {
+      setChannelBusy(null);
+    }
+  };
+
+  const addAndTestChannel = async () => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(config);
+    } catch {
+      setChannelNotice({ tone: "error", message: "Channel configuration must be valid JSON." });
+      return;
+    }
+
+    setChannelBusy("create");
+    setChannelNotice(null);
+    setErr(null);
+    try {
+      const created = await api.createChannel({
+        name: name.trim(),
+        kind,
+        config: parsed,
+        min_severity: minSev,
+      });
+      setName("");
+      setConfig("");
+      try {
+        await api.testChannel(created.id);
+        await load();
+        setChannelNotice({
+          tone: "success",
+          message: `${created.name} was added and the test notification was delivered.`,
+        });
+      } catch (e: any) {
+        await load();
+        setChannelNotice({
+          tone: "error",
+          message: `${created.name} was added, but its test notification failed: ${e.message}. Retry if the receiver was temporarily unavailable, or delete it and add corrected configuration.`,
+        });
+      }
+    } catch (e: any) {
+      setChannelNotice({ tone: "error", message: `Channel was not added: ${e.message}` });
+    } finally {
+      setChannelBusy(null);
     }
   };
 
@@ -412,6 +481,15 @@ export default function SettingsPage() {
           <CardTitle>Notification channels</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
+          {channelNotice && (
+            <p
+              role={channelNotice.tone === "error" ? "alert" : "status"}
+              aria-live="polite"
+              className={channelNotice.tone === "error" ? "text-sm text-destructive" : "text-sm text-emerald-600"}
+            >
+              {channelNotice.message}
+            </p>
+          )}
           {channels.map((c) => (
             <div key={c.id} className="rounded-md border p-2.5 text-sm">
               <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -431,8 +509,13 @@ export default function SettingsPage() {
                       guard(() => api.updateChannel(c.id, { enabled: v }))
                     }
                   />
-                  <Button size="sm" variant="outline" onClick={() => guard(() => api.testChannel(c.id))}>
-                    Test
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={channelBusy !== null}
+                    onClick={() => testNotificationChannel(c)}
+                  >
+                    {channelBusy === c.id ? "Testing…" : "Test"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => guard(() => api.muteChannel(c.id, 60))}>
                     Mute 1h
@@ -444,6 +527,11 @@ export default function SettingsPage() {
               </div>
               {c.last_error && (
                 <p className="mt-1 text-xs text-destructive">last error: {c.last_error}</p>
+              )}
+              {c.last_sent_at && !c.last_error && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  last delivered {new Date(c.last_sent_at).toLocaleString()}
+                </p>
               )}
             </div>
           ))}
@@ -483,27 +571,10 @@ export default function SettingsPage() {
               </select>
               <Button
                 size="sm"
-                disabled={!name.trim() || !config.trim()}
-                onClick={() =>
-                  guard(async () => {
-                    let parsed: Record<string, unknown>;
-                    try {
-                      parsed = JSON.parse(config);
-                    } catch {
-                      throw new Error("config must be valid JSON");
-                    }
-                    await api.createChannel({
-                      name: name.trim(),
-                      kind,
-                      config: parsed,
-                      min_severity: minSev,
-                    });
-                    setName("");
-                    setConfig("");
-                  })
-                }
+                disabled={!name.trim() || !config.trim() || channelBusy !== null}
+                onClick={addAndTestChannel}
               >
-                Add channel
+                {channelBusy === "create" ? "Adding & testing…" : "Add & test channel"}
               </Button>
             </div>
           </div>
