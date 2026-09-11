@@ -60,6 +60,15 @@ class HubSmokeTest(unittest.TestCase):
         self.assertEqual(response.headers["X-Frame-Options"], "DENY")
         self.assertEqual(response.headers["Cross-Origin-Opener-Policy"], "same-origin")
 
+    def test_current_principal_identifies_root_owner(self) -> None:
+        response = self.client.get("/api/v1/auth/me")
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["label"], "admin-token")
+        self.assertEqual(body["role"], "owner")
+        self.assertTrue(body["tenant_id"])
+        self.assertIsNone(body["group_id"])
+
     def test_ui_websocket_requires_subprotocol_token(self) -> None:
         with self.client.websocket_connect(
             "/api/v1/ui/stream", subprotocols=["meerkat42"]

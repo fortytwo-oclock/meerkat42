@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from hub.api.v1 import (
     alerts,
     agent_tokens,
+    auth,
     branding,
     billing,
     channels,
@@ -19,6 +20,7 @@ from hub.api.v1 import (
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router, tags=["health"])
+api_router.include_router(auth.router, tags=["auth"])
 api_router.include_router(branding.router, tags=["branding"])
 api_router.include_router(billing.router, tags=["billing"])
 api_router.include_router(licenses.router, tags=["license"])

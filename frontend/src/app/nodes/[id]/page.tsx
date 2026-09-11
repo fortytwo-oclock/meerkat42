@@ -13,7 +13,13 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
-import { api, type BackupMeta, type MetricSeries, type RemoteCommand } from "@/lib/api";
+import {
+  api,
+  type BackupMeta,
+  type MetricSeries,
+  type PrincipalInfo,
+  type RemoteCommand,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -39,7 +45,9 @@ export default function NodeDetailPage() {
   const [backups, setBackups] = useState<BackupMeta[] | null>(null);
   const [vaultMsg, setVaultMsg] = useState<string | null>(null);
   const [commands, setCommands] = useState<RemoteCommand[] | null>(null);
-  const [commandMsg, setCommandMsg] = useState<string | null>(null);
+  const [principal, setPrincipal] = useState<PrincipalInfo | null>(null);
+  const [commandMsg, setCommandMsg] = useState<{ text: string; error: boolean } | null>(null);
+  const [approvingCommandId, setApprovingCommandId] = useState<string | null>(null);
   const [pendingContainerAction, setPendingContainerAction] = useState<{
     container: string;
     action: "update" | "restart" | "stop";
@@ -57,6 +65,9 @@ export default function NodeDetailPage() {
       setBackups(null);
     }
   };
+  useEffect(() => {
+    api.currentPrincipal().then(setPrincipal).catch(() => setPrincipal(null));
+  }, [id]);
   useEffect(() => {
     loadBackups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,14 +139,15 @@ export default function NodeDetailPage() {
         guest_type: guest.type,
         vmid: guest.vmid,
       });
-      setCommandMsg(
-        created.status === "AWAITING_APPROVAL"
+      setCommandMsg({
+        text: created.status === "AWAITING_APPROVAL"
           ? `${action.replace("proxmox_", "")} awaits a second owner's approval.`
           : `${action.replace("proxmox_", "")} queued for ${guest.name || guest.vmid}.`,
-      );
+        error: false,
+      });
       await loadCommands();
     } catch (e: any) {
-      setCommandMsg(e.message);
+      setCommandMsg({ text: e.message, error: true });
     }
   };
   const queueContainerAction = async (
@@ -153,15 +165,19 @@ export default function NodeDetailPage() {
         : action === "docker_restart_container"
           ? "Restart"
           : "Stop";
-      setCommandMsg(
-        created.status === "AWAITING_APPROVAL"
+      setCommandMsg({
+        text: created.status === "AWAITING_APPROVAL"
           ? `${verb} for ${container.name} awaits a second owner's approval.`
           : `${verb} queued for ${container.name}.`,
-      );
+        error: false,
+      });
       setPendingContainerAction(null);
       await loadCommands();
     } catch (error) {
-      setCommandMsg(error instanceof Error ? error.message : "Container action failed");
+      setCommandMsg({
+        text: error instanceof Error ? error.message : "Container action failed",
+        error: true,
+      });
     } finally {
       setContainerActionBusy(null);
     }
@@ -446,10 +462,10 @@ export default function NodeDetailPage() {
                   setCommandMsg(null);
                   try {
                     await api.createCommand(id, "ping");
-                    setCommandMsg("Ping queued in the audited command ledger.");
+                    setCommandMsg({ text: "Ping queued in the audited command ledger.", error: false });
                     await loadCommands();
                   } catch (e: any) {
-                    setCommandMsg(e.message);
+                    setCommandMsg({ text: e.message, error: true });
                   }
                 }}
               >
@@ -457,7 +473,18 @@ export default function NodeDetailPage() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-2">
-              {commandMsg && <p className="text-xs text-muted-foreground">{commandMsg}</p>}
+              {commandMsg && (
+                <p
+                  className={`rounded-md border px-3 py-2 text-sm ${
+                    commandMsg.error
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border bg-muted text-foreground"
+                  }`}
+                  role={commandMsg.error ? "alert" : "status"}
+                >
+                  {commandMsg.text}
+                </p>
+              )}
               {commands.length === 0 && (
                 <p className="text-sm text-muted-foreground">No remote actions recorded.</p>
               )}
@@ -468,22 +495,37 @@ export default function NodeDetailPage() {
                   </span>
                   <span className="flex min-w-0 flex-wrap items-center gap-2 break-words text-xs text-muted-foreground">
                     {command.error ?? (command.attempts ? `${command.attempts} attempt(s)` : "waiting")}
-                    {command.status === "AWAITING_APPROVAL" && (
+                    {command.status === "AWAITING_APPROVAL" && principal?.role === "owner" && principal.label !== command.requested_by && (
                       <Button
                         size="sm"
                         variant="outline"
+                        disabled={approvingCommandId !== null}
                         onClick={async () => {
+                          setApprovingCommandId(command.id);
+                          setCommandMsg(null);
                           try {
                             await api.approveCommand(command.id);
-                            setCommandMsg("Command approved and queued.");
+                            setCommandMsg({ text: "Command approved and queued.", error: false });
                             await loadCommands();
                           } catch (e: any) {
-                            setCommandMsg(e.message);
+                            setCommandMsg({ text: e.message, error: true });
+                          } finally {
+                            setApprovingCommandId(null);
                           }
                         }}
                       >
-                        Approve
+                        {approvingCommandId === command.id ? "Approving…" : "Approve"}
                       </Button>
+                    )}
+                    {command.status === "AWAITING_APPROVAL" && principal?.label === command.requested_by && (
+                      <span className="font-medium text-amber-700 dark:text-amber-400">
+                        Requires a different owner
+                      </span>
+                    )}
+                    {command.status === "AWAITING_APPROVAL" && principal !== null && principal.role !== "owner" && (
+                      <span className="font-medium text-amber-700 dark:text-amber-400">
+                        Owner approval required
+                      </span>
                     )}
                     <Badge
                       variant={
@@ -529,9 +571,12 @@ export default function NodeDetailPage() {
                         const session = await api.createEmergencySession(totp);
                         setEmergencyGrant(session.grant);
                         setTotp("");
-                        setCommandMsg(`Emergency access unlocked until ${new Date(session.expires_at).toLocaleTimeString()}.`);
+                        setCommandMsg({
+                          text: `Emergency access unlocked until ${new Date(session.expires_at).toLocaleTimeString()}.`,
+                          error: false,
+                        });
                       } catch (e: any) {
-                        setCommandMsg(e.message);
+                        setCommandMsg({ text: e.message, error: true });
                       }
                     }}
                   >
@@ -548,10 +593,10 @@ export default function NodeDetailPage() {
                       onClick={async () => {
                         try {
                           await api.runDiagnostic(id, value, emergencyGrant);
-                          setCommandMsg(`${label} diagnostic queued.`);
+                          setCommandMsg({ text: `${label} diagnostic queued.`, error: false });
                           await loadCommands();
                         } catch (e: any) {
-                          setCommandMsg(e.message);
+                          setCommandMsg({ text: e.message, error: true });
                           if (String(e.message).includes("grant")) setEmergencyGrant(null);
                         }
                       }}

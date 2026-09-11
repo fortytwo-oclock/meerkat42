@@ -95,6 +95,13 @@ export interface ApiTokenInfo {
   revoked: boolean;
 }
 
+export interface PrincipalInfo {
+  label: string;
+  role: "owner" | "admin" | "viewer";
+  tenant_id: string;
+  group_id: string | null;
+}
+
 export interface AgentTokenInfo {
   id: string;
   name: string;
@@ -212,6 +219,7 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  currentPrincipal: () => j<PrincipalInfo>(`/api/v1/auth/me`),
   nodes: (group?: string) =>
     j<{ nodes: NodeSummary[]; total: number }>(
       `/api/v1/nodes${group ? `?client_group=${encodeURIComponent(group)}` : ""}`,
