@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -33,6 +32,9 @@ export default function NodeDetailPage() {
   const [node, setNode] = useState<any>(null);
   const [cpu, setCpu] = useState<MetricSeries | null>(null);
   const [ram, setRam] = useState<MetricSeries | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [chartWidth, setChartWidth] = useState(0);
+  const chartContainer = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState(6);
   const [backups, setBackups] = useState<BackupMeta[] | null>(null);
   const [vaultMsg, setVaultMsg] = useState<string | null>(null);
@@ -76,19 +78,39 @@ export default function NodeDetailPage() {
 
   useEffect(() => {
     const load = async () => {
-      const [n, c, r] = await Promise.all([
-        api.node(id),
-        api.nodeMetrics(id, "cpu_usage_pct", range),
-        api.nodeMetrics(id, "ram_usage_pct", range),
-      ]);
-      setNode(n);
-      setCpu(c);
-      setRam(r);
+      try {
+        const [n, c, r] = await Promise.all([
+          api.node(id),
+          api.nodeMetrics(id, "cpu_usage_pct", range),
+          api.nodeMetrics(id, "ram_usage_pct", range),
+        ]);
+        setNode(n);
+        setCpu(c);
+        setRam(r);
+        setMetricsError(null);
+      } catch (error) {
+        setMetricsError(error instanceof Error ? error.message : "Unable to load metrics");
+      }
     };
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [id, range]);
+
+  useEffect(() => {
+    const element = chartContainer.current;
+    if (!element) return;
+
+    const measure = () => setChartWidth(Math.floor(element.getBoundingClientRect().width));
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [node?.node_id]);
 
   if (!node) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
 
@@ -152,16 +174,24 @@ export default function NodeDetailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+          <div ref={chartContainer} className="h-64 w-full overflow-hidden">
+            {metricsError ? (
+              <div className="flex h-full items-center justify-center text-sm text-destructive" role="alert">
+                Graph unavailable: {metricsError}
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Waiting for metric samples…
+              </div>
+            ) : chartWidth > 0 ? (
+              <AreaChart width={chartWidth} height={256} data={chartData}>
                 <XAxis dataKey="ts" tick={{ fontSize: 10 }} minTickGap={40} />
                 <YAxis tick={{ fontSize: 10 }} domain={[0, 100]} />
                 <Tooltip />
-                <Area dataKey="cpu" stroke="#6366f1" fill="#6366f133" />
-                <Area dataKey="ram" stroke="#10b981" fill="#10b98133" />
+                <Area dataKey="cpu" name="CPU" stroke="#6366f1" fill="#6366f133" isAnimationActive={false} />
+                <Area dataKey="ram" name="RAM" stroke="#10b981" fill="#10b98133" isAnimationActive={false} />
               </AreaChart>
-            </ResponsiveContainer>
+            ) : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             resolution: {cpu?.resolution ?? "-"}
