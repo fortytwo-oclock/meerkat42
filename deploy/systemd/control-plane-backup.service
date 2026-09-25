@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up the control-plane Hub database (pg_dump custom + manifest)
+After=docker.service
+
+[Service]
+Type=oneshot
+# Adjust the container name to your compose project (<project>-postgres-1) and the paths to your checkout.
+ExecStart=/opt/control-plane/scripts/hub_backup_docker.sh --container control-plane-postgres-1 --output-dir /var/backups/control-plane --keep 7

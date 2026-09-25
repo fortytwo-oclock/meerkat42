@@ -1,0 +1,18 @@
+# Pangolin Newt on the same host as the cloud stack.
+#
+# Use with docker-compose.pangolin.yml, which publishes Caddy on 127.0.0.1:8080 only. Point the
+# Pangolin resource for your DOMAIN at 127.0.0.1:8080 on this site, and add a rule that accepts
+# /api/v1/agent/stream so agents can connect without SSO.
+#
+#   cp newt.env.example newt.env   # fill in the site credentials from Pangolin
+#   docker compose -f docker-compose.newt.yml up -d
+#
+# Run only ONE Newt per site credential. When moving hosts, stop the old one first.
+name: control-plane-newt
+services:
+  newt:
+    image: fosrl/newt:1.16.0
+    container_name: control-plane-newt
+    network_mode: host
+    restart: unless-stopped
+    env_file: newt.env
