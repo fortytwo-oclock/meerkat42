@@ -76,6 +76,37 @@ creates an atomic dump and SHA-256 manifest; the verification command restores
 into an isolated SQLite database or an explicitly named PostgreSQL
 `*_restore_drill` database.
 
+### Single host behind Pangolin
+
+When the Hub runs on a host that already serves ports 80/443 (or has no public IP), let a
+Pangolin tunnel carry the traffic:
+
+1. Start the stack with the Pangolin override so Caddy listens on `127.0.0.1:8080` only.
+   Use the same `-p`/`-f`/`--env-file` flags every time; a small wrapper script avoids mistakes:
+
+   ```bash
+   docker compose -p control-plane --env-file deploy/cloud.env \
+     -f deploy/docker-compose.cloud.yml -f deploy/docker-compose.pangolin.yml up -d
+   ```
+2. Run Newt on the same host: copy `deploy/newt.env.example` to `deploy/newt.env`, fill in the
+   site credentials, and `docker compose -f deploy/docker-compose.newt.yml up -d`.
+3. In Pangolin, target `127.0.0.1:8080` on that site and add an accept rule for
+   `/api/v1/agent/stream`, so agents connect without SSO while people still sign in.
+
+**Moving the Hub to another host** keeps every agent connected without re-enrolment if the
+domain stays the same: stop Newt on the old host, stop the stack, copy the `postgres-data`,
+`caddy-data` and `caddy-config` volumes while stopped, start the stack on the new host, then
+start Newt there. Agents reconnect on their own once their old connection times out (a few
+minutes). Only one Newt per site credential may run at a time.
+
+**Backups without host tools:** `scripts/hub_backup_docker.sh` runs `pg_dump` inside the
+postgres container and writes the same `hub-<stamp>.dump` + manifest as `hub_backup.py`, so
+`verify_hub_restore.py` can drill-restore it. Example systemd units are in `deploy/systemd/`:
+
+```bash
+scripts/hub_backup_docker.sh --container control-plane-postgres-1 --output-dir /var/backups/control-plane --keep 7
+```
+
 ## Raspberry Pi and ARM
 
 `docker-compose.pi.yml` is the small-fleet ARM64 headend profile. It runs the Hub

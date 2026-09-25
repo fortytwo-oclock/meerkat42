@@ -23,6 +23,7 @@ frontend/.next/
 /deploy/self-host.env
 /deploy/agent.env
 /deploy/cloud.env
+/deploy/newt.env
 
 # Go
 /agent
