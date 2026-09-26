@@ -55,7 +55,9 @@ jobs:
 
   dependency-review:
     name: Dependency review
-    if: github.event_name == 'pull_request'
+    # GitHub only offers dependency review on public repos (or with Advanced Security);
+    # on a private repo the action always errors. Runs again automatically once public.
+    if: github.event_name == 'pull_request' && !github.event.repository.private
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -74,6 +76,9 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      # The lock file must be written by the npm that ships with this Node (npm 10); newer npm
+      # records optional deps differently and `npm ci` rejects the lock. After dependency changes:
+      #   cd frontend && npx -y npm@10 install --package-lock-only
       - run: npm ci
       - run: npm run build
 
