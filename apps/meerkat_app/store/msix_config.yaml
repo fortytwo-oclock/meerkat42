@@ -1,0 +1,16 @@
+# Microsoft Store & Intune MSIX packaging template for Meerkat42 Windows App
+# Used with `dart run msix:create` or Windows Partner Center CI pipeline.
+msix_config:
+  display_name: Meerkat42
+  publisher_display_name: FortyTwo O'Clock
+  identity_name: FortyTwoOClock.Meerkat42
+  msix_version: 2.0.0.0
+  publisher: CN=REPLACE-WITH-MICROSOFT-PARTNER-CENTER-PUBLISHER-ID
+  capabilities: internetClient, location
+  store: true
+  languages: en-us
+  architecture: x64
+  # Enterprise Intune silent deployment notes:
+  # - Publish to Microsoft Store (Partner Center) and assign via Intune Microsoft Store (new).
+  # - Push HKLM\Software\Policies\Meerkat42\{HubURL, EnrollToken, ClientGroup, LockServer}
+  #   for zero-touch enterprise device enrollment.

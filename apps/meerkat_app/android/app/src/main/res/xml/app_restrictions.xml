@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Managed Google Play / Android Enterprise MDM Managed Configurations schema -->
+<restrictions xmlns:android="http://schemas.android.com/apk/res/android">
+  <restriction
+      android:key="hub_url"
+      android:title="Meerkat42 Hub URL"
+      android:description="Base URL of the organization's Meerkat42 Hub (e.g. https://monitor.company.com)."
+      android:restrictionType="string"
+      android:defaultValue="" />
+  <restriction
+      android:key="enroll_token"
+      android:title="Agent Enrollment Token"
+      android:description="Tenant and room-scoped agent enrollment token (cpa_...) for zero-touch device onboarding."
+      android:restrictionType="string"
+      android:defaultValue="" />
+  <restriction
+      android:key="client_group"
+      android:title="Room / Client Group"
+      android:description="Target room or client group slug for enrolled Android devices."
+      android:restrictionType="string"
+      android:defaultValue="mobile" />
+  <restriction
+      android:key="lock_server"
+      android:title="Lock Hub Configuration"
+      android:description="Prevent end users from modifying the configured Hub URL or enrollment token."
+      android:restrictionType="bool"
+      android:defaultValue="false" />
+  <restriction
+      android:key="device_tracking_enabled"
+      android:title="Enable Enterprise Device Tracking"
+      android:description="Allow periodic location check-ins when location permission is granted."
+      android:restrictionType="bool"
+      android:defaultValue="false" />
+</restrictions>

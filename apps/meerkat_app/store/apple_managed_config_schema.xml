@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Apple Business Manager / MDM Managed App Configuration schema (AppConfig.org format) -->
+<!-- Works with Jamf Pro, Kandji, Microsoft Intune, Mosyle, and Workspace ONE for iOS & macOS -->
+<managedAppConfiguration>
+  <version>1</version>
+  <bundleId>com.fortytwooclock.meerkatApp</bundleId>
+  <dict>
+    <string keyName="hub_url">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="enroll_token">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="client_group">
+      <defaultValue>
+        <value>workstations</value>
+      </defaultValue>
+    </string>
+    <boolean keyName="lock_server">
+      <defaultValue>
+        <value>false</value>
+      </defaultValue>
+    </boolean>
+  </dict>
+  <presentation defaultLocale="en-US">
+    <field keyName="hub_url" type="input">
+      <label><language value="en-US">Meerkat42 Hub URL</language></label>
+      <description><language value="en-US">HTTPS URL of your organization's Meerkat42 Hub.</language></description>
+    </field>
+    <field keyName="enroll_token" type="input">
+      <label><language value="en-US">Enrollment Token</language></label>
+      <description><language value="en-US">Group-scoped cpa_... token for automatic device enrollment.</language></description>
+    </field>
+    <field keyName="client_group" type="input">
+      <label><language value="en-US">Room / Client Group</language></label>
+    </field>
+    <field keyName="lock_server" type="checkbox">
+      <label><language value="en-US">Lock Hub Settings</language></label>
+    </field>
+  </presentation>
+</managedAppConfiguration>
