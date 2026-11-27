@@ -1,7 +1,6 @@
 package telemetry
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -9,10 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +16,10 @@ import (
 	"control-plane/pkg/proxmox"
 )
 
-// Collector pulls system, storage, and container metrics from host mounts.
+const AgentVersion = "2.0.0-open-core"
+
+// Collector pulls cross-platform system, network, disk, battery, storage, and
+// container metrics. OS-specific collection is delegated to host_*.go files.
 type Collector struct {
 	procPath     string
 	sysPath      string
@@ -28,13 +27,29 @@ type Collector struct {
 	hostname     string
 	mu           sync.Mutex
 	lastCPU      cpuSnapshot
+	lastCores    map[string]cpuSnapshot
+	lastNet      map[string]netSnapshot
+	lastNetAt    time.Time
+	lastDisk     map[string]diskSnapshot
+	lastDiskAt   time.Time
 	imageUpdates *imageUpdateChecker
 	proxmox      *proxmox.Client
 }
 
 type cpuSnapshot struct {
-	idle  uint64
-	total uint64
+	idle   uint64
+	iowait uint64
+	total  uint64
+}
+
+type netSnapshot struct {
+	rxBytes uint64
+	txBytes uint64
+}
+
+type diskSnapshot struct {
+	readSectors  uint64
+	writeSectors uint64
 }
 
 // NewCollector initializes a collector with host-path awareness.
@@ -48,6 +63,9 @@ func NewCollector(proxmoxClients ...*proxmox.Client) *Collector {
 		sys = "/host/sys"
 	}
 	dockerSock := "/var/run/docker.sock"
+	if envSock := strings.TrimSpace(os.Getenv("DOCKER_SOCK")); envSock != "" {
+		dockerSock = envSock
+	}
 	hostname := strings.TrimSpace(os.Getenv("HOSTNAME_OVERRIDE"))
 	if hostname == "" {
 		hostname, _ = os.Hostname()
@@ -68,25 +86,67 @@ func NewCollector(proxmoxClients ...*proxmox.Client) *Collector {
 		sysPath:      sys,
 		dockerSock:   dockerSock,
 		hostname:     hostname,
+		lastCores:    make(map[string]cpuSnapshot),
+		lastNet:      make(map[string]netSnapshot),
+		lastDisk:     make(map[string]diskSnapshot),
 		imageUpdates: newImageUpdateCheckerFromEnv(),
 		proxmox:      proxmoxClient,
 	}
 }
 
 // Hostname returns the operator override or the local system hostname used in
-// handshake and telemetry frames. Containers should set HOSTNAME_OVERRIDE to
-// the monitored host's stable name rather than reporting the container ID.
+// handshake and telemetry frames.
 func (c *Collector) Hostname() string {
 	return c.hostname
 }
 
-// CollectMetrics gathers complete system telemetry.
+// HardwareInfo returns static/slow-changing hardware inventory for handshakes.
+func (c *Collector) HardwareInfo() map[string]interface{} {
+	_, _, _, hw := c.collectPlatformInfo()
+	return hw
+}
+
+// NormalizedPlatform maps runtime.GOOS to Meerkat42's canonical platform names.
+func NormalizedPlatform() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macos"
+	case "windows":
+		return "windows"
+	case "android":
+		return "android"
+	case "ios":
+		return "ios"
+	default:
+		return "linux"
+	}
+}
+
+// DefaultDeviceClass returns DEVICE_CLASS if set, otherwise infers a sensible
+// default from the host OS (workstation on Windows/macOS, server on Linux).
+func DefaultDeviceClass() string {
+	if envClass := strings.TrimSpace(strings.ToLower(os.Getenv("DEVICE_CLASS"))); envClass != "" {
+		return envClass
+	}
+	switch runtime.GOOS {
+	case "darwin", "windows":
+		return "workstation"
+	case "android", "ios":
+		return "mobile"
+	default:
+		return "server"
+	}
+}
+
+// CollectMetrics gathers complete cross-platform system telemetry.
 func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
-	uptime := c.getUptime()
-	hostMetrics := c.getHostMetrics()
+	osName, kernel, uptime, hardware := c.collectPlatformInfo()
+	hostMetrics, hostExtra := c.collectPlatformHostMetrics()
+	netMetrics, diskIO, ioMetrics := c.collectPlatformNetDisk()
+	battery := c.collectPlatformBattery()
+	zfsPools, disks := c.collectPlatformExtra()
 	containers := c.getDockerContainers()
-	zfsPools := c.getZFSPools()
-	disks := c.getSMARTDisks()
+
 	var guests []proxmox.Guest
 	if c.proxmox != nil {
 		var err error
@@ -96,143 +156,44 @@ func (c *Collector) CollectMetrics(nodeID string) (*NodeTelemetry, error) {
 		}
 	}
 
-	kernel := c.readFirstLine(filepath.Join(c.procPath, "version"))
-	if len(kernel) > 80 {
-		kernel = kernel[:80] + "..."
+	dynamicMetrics := make(map[string]float64)
+	dynamicMetrics["cpu.cores"] = float64(runtime.NumCPU())
+	for k, v := range hostExtra {
+		dynamicMetrics[k] = v
+	}
+	for k, v := range ioMetrics {
+		dynamicMetrics[k] = v
 	}
 
 	return &NodeTelemetry{
 		NodeID:      nodeID,
 		Hostname:    c.hostname,
-		OS:          "Linux",
+		OS:          osName,
+		Platform:    NormalizedPlatform(),
+		DeviceClass: DefaultDeviceClass(),
 		Arch:        runtime.GOARCH,
 		Kernel:      kernel,
 		UptimeSec:   uptime,
 		Timestamp:   time.Now().UTC(),
 		HostMetrics: hostMetrics,
+		Battery:     battery,
+		Network:     netMetrics,
+		DiskIO:      diskIO,
+		Hardware:    hardware,
+		Metrics:     dynamicMetrics,
 		ZFS:         zfsPools,
 		Containers:  containers,
 		Disks:       disks,
 		Proxmox:     guests,
-		AgentVer:    "1.0.0-open-core",
+		AgentVer:    AgentVersion,
 	}, nil
-}
-
-func (c *Collector) getUptime() uint64 {
-	data := c.readFirstLine(filepath.Join(c.procPath, "uptime"))
-	parts := strings.Fields(data)
-	if len(parts) > 0 {
-		sec, _ := strconv.ParseFloat(parts[0], 64)
-		return uint64(sec)
-	}
-	return 0
-}
-
-func (c *Collector) getHostMetrics() HostMetrics {
-	var metrics HostMetrics
-
-	// Load Averages
-	loadData := c.readFirstLine(filepath.Join(c.procPath, "loadavg"))
-	loadParts := strings.Fields(loadData)
-	if len(loadParts) >= 3 {
-		metrics.Load1, _ = strconv.ParseFloat(loadParts[0], 64)
-		metrics.Load5, _ = strconv.ParseFloat(loadParts[1], 64)
-		metrics.Load15, _ = strconv.ParseFloat(loadParts[2], 64)
-	}
-
-	// Memory info (/proc/meminfo)
-	memPath := filepath.Join(c.procPath, "meminfo")
-	if file, err := os.Open(memPath); err == nil {
-		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		var totalKB, availKB uint64
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.HasPrefix(line, "MemTotal:") {
-				totalKB = parseMemKB(line)
-			} else if strings.HasPrefix(line, "MemAvailable:") {
-				availKB = parseMemKB(line)
-			}
-		}
-		if totalKB > 0 {
-			metrics.TotalRAMMB = totalKB / 1024
-			metrics.AvailRAMMB = availKB / 1024
-			metrics.UsedRAMMB = metrics.TotalRAMMB - metrics.AvailRAMMB
-			metrics.RAMUsagePct = float64(metrics.UsedRAMMB) / float64(metrics.TotalRAMMB) * 100.0
-		}
-	}
-
-	// CPU usage from /proc/stat
-	metrics.CPUUsagePct = c.calculateCPUUsage()
-
-	return metrics
-}
-
-func parseMemKB(line string) uint64 {
-	fields := strings.Fields(line)
-	if len(fields) >= 2 {
-		val, _ := strconv.ParseUint(fields[1], 10, 64)
-		return val
-	}
-	return 0
-}
-
-func (c *Collector) calculateCPUUsage() float64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	statPath := filepath.Join(c.procPath, "stat")
-	file, err := os.Open(statPath)
-	if err != nil {
-		return 0.0
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	if !scanner.Scan() {
-		return 0.0
-	}
-	cpuLine := scanner.Text()
-	parts := strings.Fields(cpuLine)
-	if len(parts) < 5 || parts[0] != "cpu" {
-		return 0.0
-	}
-
-	var total uint64
-	var idle uint64
-	for i := 1; i < len(parts); i++ {
-		val, _ := strconv.ParseUint(parts[i], 10, 64)
-		total += val
-		if i == 4 { // 4th field is idle
-			idle = val
-		}
-	}
-
-	if c.lastCPU.total == 0 {
-		c.lastCPU = cpuSnapshot{idle: idle, total: total}
-		return 0.0
-	}
-
-	deltaTotal := total - c.lastCPU.total
-	deltaIdle := idle - c.lastCPU.idle
-	c.lastCPU = cpuSnapshot{idle: idle, total: total}
-
-	if deltaTotal == 0 {
-		return 0.0
-	}
-
-	usage := float64(deltaTotal-deltaIdle) / float64(deltaTotal) * 100.0
-	if usage < 0 {
-		usage = 0
-	}
-	if usage > 100 {
-		usage = 100
-	}
-	return usage
 }
 
 // getDockerContainers queries docker engine over local unix domain socket without external SDKs.
 func (c *Collector) getDockerContainers() []ContainerSummary {
+	if runtime.GOOS == "windows" || c.dockerSock == "" {
+		return nil
+	}
 	if _, err := os.Stat(c.dockerSock); err != nil {
 		return nil
 	}
@@ -318,84 +279,11 @@ func (c *Collector) getDockerContainers() []ContainerSummary {
 	return summaries
 }
 
-// getZFSPools reads ZFS pool stats if running on Proxmox/TrueNAS or host with ZFS.
-func (c *Collector) getZFSPools() []ZFSPoolHealth {
-	// 1. Try running zpool list
-	cmd := exec.Command("zpool", "list", "-H", "-o", "name,size,alloc,free,cap,health")
-	out, err := cmd.Output()
-	if err != nil {
-		// If zpool binary is not directly available, check /proc/spl/kstat/zfs
-		return c.getZFSPoolsFromProc()
-	}
-
-	var pools []ZFSPoolHealth
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 6 {
-			capStr := strings.TrimSuffix(fields[4], "%")
-			capPct, _ := strconv.Atoi(capStr)
-			pools = append(pools, ZFSPoolHealth{
-				PoolName:    fields[0],
-				State:       fields[5],
-				CapacityPct: capPct,
-			})
-		}
-	}
-	return pools
-}
-
-func (c *Collector) getZFSPoolsFromProc() []ZFSPoolHealth {
-	zfsProcDir := filepath.Join(c.procPath, "spl/kstat/zfs")
-	entries, err := os.ReadDir(zfsProcDir)
-	if err != nil {
-		return nil
-	}
-
-	var pools []ZFSPoolHealth
-	for _, entry := range entries {
-		if entry.IsDir() {
-			pools = append(pools, ZFSPoolHealth{
-				PoolName: entry.Name(),
-				State:    "ONLINE",
-			})
-		}
-	}
-	return pools
-}
-
-// getSMARTDisks queries disk health status or sysfs devices.
-func (c *Collector) getSMARTDisks() []DiskSMART {
-	blockDir := filepath.Join(c.sysPath, "block")
-	entries, err := os.ReadDir(blockDir)
-	if err != nil {
-		return nil
-	}
-
-	var disks []DiskSMART
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, "sd") || strings.HasPrefix(name, "nvme") || strings.HasPrefix(name, "vd") {
-			modelPath := filepath.Join(blockDir, name, "device", "model")
-			model := c.readFirstLine(modelPath)
-			disks = append(disks, DiskSMART{
-				DeviceName: "/dev/" + name,
-				Model:      model,
-				Health:     "PASSED",
-			})
-		}
-	}
-	return disks
-}
-
 func (c *Collector) readFirstLine(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) > 0 {
-		return lines[0]
-	}
-	return ""
+	lines := strings.SplitN(string(data), "\n", 2)
+	return strings.TrimSpace(lines[0])
 }
