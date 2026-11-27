@@ -94,3 +94,19 @@ jobs:
       - run: docker compose --env-file /tmp/cloud.env -f deploy/docker-compose.cloud.yml -f deploy/docker-compose.pangolin.yml config
       - run: docker compose --env-file deploy/test.env.example -p control-plane-test -f deploy/docker-compose.test.yml config
       - run: docker compose --env-file deploy/pi.env.example -f deploy/docker-compose.pi.yml config
+
+  flutter:
+    name: Unified Flutter Store app
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/meerkat_app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

@@ -2,6 +2,7 @@
 from hub.models.alert import AlertEvent, AlertPendingCondition, AlertRule, NotificationChannel
 from hub.models.auth import AgentEnrollmentToken, ApiToken, EmergencyAccessGrant, Role
 from hub.models.billing import BillingSubscription, IssuedLicense, StripeWebhookEvent
+from hub.models.enterprise import GeofenceZone, PushDevice
 from hub.models.license import LicenseRecord
 from hub.models.metric import MetricPoint, MetricRollup
 from hub.models.node import ClientGroup, Node
@@ -30,4 +31,6 @@ __all__ = [
     "ConfigBackup",
     "MetricPoint",
     "MetricRollup",
+    "PushDevice",
+    "GeofenceZone",
 ]

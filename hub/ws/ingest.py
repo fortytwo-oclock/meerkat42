@@ -142,6 +142,10 @@ async def agent_stream(websocket: WebSocket) -> None:
                         session, tenant_id, enabled_only=True
                     )
                     await alerting.evaluate(session, node, data, rules)
+                    if node.last_location is not None and lm.has_feature("geofencing"):
+                        from hub.ee.geofencing import evaluate_geofences
+
+                        await evaluate_geofences(session, tenant_id, node)
 
             await store.write(node_id, ts, extract_scalars(data))
             await bus.publish(

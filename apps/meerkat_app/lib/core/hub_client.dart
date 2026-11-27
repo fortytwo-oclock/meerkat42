@@ -91,4 +91,17 @@ class HubClient {
         .toList();
     return (tier: tier, enterprise: features);
   }
+
+  Future<String> registerPushDevice({
+    required String platform,
+    required String deviceToken,
+    String deviceName = 'Meerkat42 App',
+  }) async {
+    final json = await _request('POST', '/api/v1/push/devices', body: {
+      'platform': platform,
+      'device_token': deviceToken,
+      'device_name': deviceName,
+    });
+    return json['id'] as String? ?? '';
+  }
 }

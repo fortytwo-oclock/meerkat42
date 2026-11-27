@@ -178,11 +178,40 @@ class SmtpSender(Sender):
             raise ChannelError(f"smtp send failed: {exc}") from exc
 
 
+class PushRelaySender(Sender):
+    """Delivers alert push notifications to APNs/FCM/WNS via a Meerkat42 Push Relay."""
+
+    async def send(self, payload: AlertPayload) -> None:
+        url = (self.config.get("url") or get_settings().push_relay_url).strip()
+        if not url:
+            raise ChannelError("push_relay channel missing 'url' (or PUSH_RELAY_URL)")
+        headers = {"Content-Type": "application/json"}
+        api_key = (self.config.get("api_key") or get_settings().push_relay_api_key).strip()
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        await _post(
+            url,
+            json={
+                "title": payload.title,
+                "body": payload.message,
+                "severity": payload.severity,
+                "state": payload.state,
+                "node_id": payload.node_id,
+                "client_group": payload.client_group,
+                "event_id": payload.event_id,
+                "tokens": self.config.get("tokens", []),
+            },
+            headers=headers,
+            kind="webhook",
+        )
+
+
 _SENDERS: dict[str, type[Sender]] = {
     "webhook": WebhookSender,
     "discord": DiscordSender,
     "slack": SlackSender,
     "smtp": SmtpSender,
+    "push_relay": PushRelaySender,
 }
 
 
