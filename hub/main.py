@@ -144,6 +144,13 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     app.include_router(ingest_router)
     app.include_router(ui_router)
+
+    static_dir = settings.static_frontend_dir.strip()
+    if static_dir and os.path.isdir(static_dir):
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static-ui")
+        log.info("serving static frontend from %s", static_dir)
     return app
 
 

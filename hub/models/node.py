@@ -20,6 +20,20 @@ class NodeStatus(str, enum.Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class DeviceClass(str, enum.Enum):
+    SERVER = "server"
+    WORKSTATION = "workstation"
+    MOBILE = "mobile"
+    IOT = "iot"
+    CONTAINER_HOST = "container_host"
+
+
+VALID_DEVICE_CLASSES: frozenset[str] = frozenset(dc.value for dc in DeviceClass)
+VALID_PLATFORMS: frozenset[str] = frozenset(
+    {"linux", "windows", "macos", "ios", "android"}
+)
+
+
 class ClientGroup(Base):
     """An MSP client / logical grouping of nodes (e.g. "Client Apex", "Internal Lab")."""
 
@@ -43,7 +57,7 @@ class ClientGroup(Base):
 
 
 class Node(Base):
-    """A monitored edge agent. `node_id` is agent-supplied and stable across reconnects."""
+    """A monitored edge agent or tracked device. `node_id` is agent-supplied and stable across reconnects."""
 
     __tablename__ = "nodes"
 
@@ -54,6 +68,10 @@ class Node(Base):
 
     hostname: Mapped[str] = mapped_column(String(255), default="unknown")
     os: Mapped[Optional[str]] = mapped_column(String(128), default=None)
+    platform: Mapped[Optional[str]] = mapped_column(String(32), default=None, index=True)
+    device_class: Mapped[str] = mapped_column(
+        String(32), default=DeviceClass.SERVER.value, server_default=DeviceClass.SERVER.value, index=True
+    )
     arch: Mapped[Optional[str]] = mapped_column(String(32), default=None)
     kernel: Mapped[Optional[str]] = mapped_column(String(128), default=None)
     agent_version: Mapped[Optional[str]] = mapped_column(String(64), default=None)
@@ -68,6 +86,8 @@ class Node(Base):
     last_seen: Mapped[Optional[datetime]] = mapped_column(TZDateTime, default=None)
 
     labels: Mapped[dict] = mapped_column(default=dict)
+    hardware_info: Mapped[Optional[dict]] = mapped_column(default=None)
+    last_location: Mapped[Optional[dict]] = mapped_column(default=None)
     # Denormalised latest telemetry snapshot for fast fleet-matrix reads.
     last_telemetry: Mapped[Optional[dict]] = mapped_column(default=None)
 

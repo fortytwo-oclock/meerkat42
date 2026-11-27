@@ -15,11 +15,70 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from hub.config import get_settings
 
+COMMUNITY_FEATURES: tuple[str, ...] = (
+    "host_metrics",
+    "docker_stats",
+    "basic_alerts",
+    "workstation_metrics",
+    "mobile_metrics",
+    "live_stream",
+    "device_checkin",
+)
+
+# Enterprise capabilities unlocked via an offline Ed25519 license token (or "*" wildcard).
+ENTERPRISE_FEATURES: dict[str, dict[str, str]] = {
+    "sso_oidc": {
+        "name": "OIDC / SAML SSO",
+        "category": "identity",
+        "description": "Single sign-on via OIDC/SAML identity providers and SCIM group sync.",
+    },
+    "multi_tenant": {
+        "name": "Multi-Tenant Spaces",
+        "category": "governance",
+        "description": "Unlimited isolated tenant Spaces with scoped client portals and RBAC.",
+    },
+    "mdm_fleet": {
+        "name": "Enterprise MDM & Store Distribution",
+        "category": "devices",
+        "description": "Zero-touch enrollment and managed app configs via Intune, Apple Business Manager, and Managed Google Play.",
+    },
+    "geofencing": {
+        "name": "Continuous Device Tracking & Geofencing",
+        "category": "devices",
+        "description": "Location history, geofence entry/exit alert rules, and asset tracking exports.",
+    },
+    "long_retention": {
+        "name": "Long-Term Metric Retention",
+        "category": "observability",
+        "description": "Extended high-resolution metric retention (1-5+ years) and enterprise TSDB/OTLP export.",
+    },
+    "vault_backup": {
+        "name": "Encrypted Configuration Vault",
+        "category": "operations",
+        "description": "Agent-side AES-256-GCM encrypted Compose and environment backup storage.",
+    },
+    "two_person_approval": {
+        "name": "Enforced Two-Owner Approvals",
+        "category": "governance",
+        "description": "Require a second independent owner approval before destructive remote actions execute.",
+    },
+    "audit_export": {
+        "name": "SIEM Audit Export",
+        "category": "compliance",
+        "description": "Immutable audit log streaming and compliance exports.",
+    },
+    "white_label": {
+        "name": "White-Label Branding",
+        "category": "branding",
+        "description": "Custom product name, logo, colors, and branded enterprise store builds.",
+    },
+}
+
 COMMUNITY_CLAIMS: dict[str, Any] = {
     "tier": "community",
     "customer_name": "Community Edition User",
-    "max_nodes": 3,
-    "features": ["docker_stats", "host_metrics", "basic_alerts"],
+    "max_nodes": -1,  # Unlimited self-hosted nodes under Feature-Gated Open Core
+    "features": list(COMMUNITY_FEATURES),
     "exp": 0,
 }
 
@@ -86,7 +145,7 @@ class LicenseManager:
     # -- policy -----------------------------------------------------
     @property
     def max_nodes(self) -> int:
-        return int(self.claims.get("max_nodes", 3))
+        return int(self.claims.get("max_nodes", -1))
 
     @property
     def is_unlimited(self) -> bool:
@@ -98,5 +157,25 @@ class LicenseManager:
         return self.is_unlimited or current_count < self.max_nodes
 
     def has_feature(self, feature: str) -> bool:
+        if feature in COMMUNITY_FEATURES:
+            return True
         feats = self.claims.get("features", [])
         return feature in feats or "*" in feats
+
+    def enterprise_entitlements(self) -> dict[str, bool]:
+        """Return enabled/disabled status for every Enterprise feature key."""
+        return {key: self.has_feature(key) for key in ENTERPRISE_FEATURES}
+
+    def feature_catalog(self) -> list[dict[str, Any]]:
+        """Describe every Enterprise feature along with whether the active license unlocks it."""
+        return [
+            {
+                "key": key,
+                "name": meta["name"],
+                "category": meta["category"],
+                "description": meta["description"],
+                "tier": "enterprise",
+                "enabled": self.has_feature(key),
+            }
+            for key, meta in ENTERPRISE_FEATURES.items()
+        ]

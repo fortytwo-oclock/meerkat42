@@ -116,6 +116,11 @@ class Settings(BaseSettings):
     default_tenant_slug: str = "default"
     default_group_slug: str = "default"
 
+    # --- Native / single-process static UI ----------------------------
+    # Optional path to a pre-built static dashboard directory served at `/`
+    # after `/api/*` routes for zero-Docker single-process deployments.
+    static_frontend_dir: str = ""
+
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")

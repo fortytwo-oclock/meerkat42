@@ -6,21 +6,60 @@ import (
 	"control-plane/pkg/proxmox"
 )
 
-// NodeTelemetry represents the 10-second outbound payload sent by the Edge Agent.
+// NodeTelemetry represents the outbound telemetry payload sent by the Edge Agent.
 type NodeTelemetry struct {
-	NodeID      string             `json:"node_id"`
-	Hostname    string             `json:"hostname"`
-	OS          string             `json:"os"`
-	Arch        string             `json:"arch"`
-	Kernel      string             `json:"kernel"`
-	UptimeSec   uint64             `json:"uptime_sec"`
-	Timestamp   time.Time          `json:"timestamp"`
-	HostMetrics HostMetrics        `json:"host_metrics"`
-	ZFS         []ZFSPoolHealth    `json:"zfs,omitempty"`
-	Containers  []ContainerSummary `json:"containers,omitempty"`
-	Disks       []DiskSMART        `json:"disks,omitempty"`
-	Proxmox     []proxmox.Guest    `json:"proxmox_guests,omitempty"`
-	AgentVer    string             `json:"agent_version"`
+	NodeID      string                 `json:"node_id"`
+	Hostname    string                 `json:"hostname"`
+	OS          string                 `json:"os"`
+	Platform    string                 `json:"platform,omitempty"`
+	DeviceClass string                 `json:"device_class,omitempty"`
+	Arch        string                 `json:"arch"`
+	Kernel      string                 `json:"kernel"`
+	UptimeSec   uint64                 `json:"uptime_sec"`
+	Timestamp   time.Time              `json:"timestamp"`
+	HostMetrics HostMetrics            `json:"host_metrics"`
+	Battery     *BatteryMetrics        `json:"battery,omitempty"`
+	Network     *NetworkMetrics        `json:"network,omitempty"`
+	DiskIO      *DiskIOMetrics         `json:"disk_io,omitempty"`
+	Location    *DeviceLocation        `json:"location,omitempty"`
+	Hardware    map[string]interface{} `json:"hardware,omitempty"`
+	Metrics     map[string]float64     `json:"metrics,omitempty"`
+	ZFS         []ZFSPoolHealth        `json:"zfs,omitempty"`
+	Containers  []ContainerSummary     `json:"containers,omitempty"`
+	Disks       []DiskSMART            `json:"disks,omitempty"`
+	Proxmox     []proxmox.Guest        `json:"proxmox_guests,omitempty"`
+	AgentVer    string                 `json:"agent_version"`
+}
+
+// BatteryMetrics captures workstation or mobile battery telemetry.
+type BatteryMetrics struct {
+	Pct          float64 `json:"pct"`
+	Charging     bool    `json:"charging"`
+	TemperatureC float64 `json:"temperature_c,omitempty"`
+}
+
+// NetworkMetrics captures aggregate network throughput.
+type NetworkMetrics struct {
+	RxBps float64 `json:"rx_bps"`
+	TxBps float64 `json:"tx_bps"`
+}
+
+// DiskIOMetrics captures aggregate disk throughput.
+type DiskIOMetrics struct {
+	ReadBps  float64 `json:"read_bps"`
+	WriteBps float64 `json:"write_bps"`
+}
+
+// DeviceLocation represents opt-in device tracking coordinates.
+type DeviceLocation struct {
+	Lat       float64 `json:"lat"`
+	Lon       float64 `json:"lon"`
+	AccuracyM float64 `json:"accuracy_m,omitempty"`
+	AltitudeM float64 `json:"altitude_m,omitempty"`
+	SpeedMps  float64 `json:"speed_mps,omitempty"`
+	Zone      string  `json:"zone,omitempty"`
+	Source    string  `json:"source,omitempty"`
+	UpdatedAt string  `json:"updated_at,omitempty"`
 }
 
 // HostMetrics captures CPU, RAM, and load averages.
@@ -78,17 +117,20 @@ type DiskSMART struct {
 
 // AuthHandshake is sent by the edge agent upon establishing the outbound WebSocket.
 type AuthHandshake struct {
-	NodeID      string `json:"node_id"`
-	AuthToken   string `json:"auth_token"`
-	AgentVer    string `json:"agent_version"`
-	Hostname    string `json:"hostname"`
-	Arch        string `json:"arch"`
-	ClientGroup string `json:"client_group,omitempty"`
+	NodeID      string                 `json:"node_id"`
+	AuthToken   string                 `json:"auth_token"`
+	AgentVer    string                 `json:"agent_version"`
+	Hostname    string                 `json:"hostname"`
+	Platform    string                 `json:"platform,omitempty"`
+	DeviceClass string                 `json:"device_class,omitempty"`
+	Arch        string                 `json:"arch"`
+	ClientGroup string                 `json:"client_group,omitempty"`
+	Hardware    map[string]interface{} `json:"hardware,omitempty"`
 }
 
 // HubCommand is a message sent from the Hub down to the Agent over the persistent tunnel.
 type HubCommand struct {
 	CommandID string                 `json:"command_id"`
-	Action    string                 `json:"action"` // "ping", "request_config_backup", "trigger_scrub"
+	Action    string                 `json:"action"` // "ping", "request_config_backup", "set_stream_rate"
 	Payload   map[string]interface{} `json:"payload,omitempty"`
 }

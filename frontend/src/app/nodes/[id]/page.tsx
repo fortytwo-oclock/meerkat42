@@ -10,9 +10,17 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  Activity,
+  Battery,
+  Cpu,
+  MapPin,
+  Radio,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
+import { useLiveStream } from "@/hooks/useLiveStream";
 import {
   api,
   type BackupMeta,
@@ -39,6 +47,11 @@ export default function NodeDetailPage() {
   const [cpu, setCpu] = useState<MetricSeries | null>(null);
   const [ram, setRam] = useState<MetricSeries | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [metricCatalog, setMetricCatalog] = useState<string[]>([]);
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const [customSeries, setCustomSeries] = useState<MetricSeries | null>(null);
+  const [liveTail, setLiveTail] = useState(false);
+  const [liveTailMsg, setLiveTailMsg] = useState<string | null>(null);
   const [chartWidth, setChartWidth] = useState(0);
   const chartContainer = useRef<HTMLDivElement>(null);
   const [range, setRange] = useState(6);
@@ -95,14 +108,20 @@ export default function NodeDetailPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [n, c, r] = await Promise.all([
+        const [n, c, r, cat] = await Promise.all([
           api.node(id),
           api.nodeMetrics(id, "cpu_usage_pct", range),
           api.nodeMetrics(id, "ram_usage_pct", range),
+          api.nodeMetricsCatalog(id).catch(() => ({ node_id: id, metrics: [], total: 0 })),
         ]);
         setNode(n);
         setCpu(c);
         setRam(r);
+        const extra = cat.metrics.filter(
+          (m) => m !== "cpu_usage_pct" && m !== "ram_usage_pct",
+        );
+        setMetricCatalog(extra);
+        setSelectedMetric((prev) => (prev && extra.includes(prev) ? prev : extra[0] ?? null));
         setMetricsError(null);
       } catch (error) {
         setMetricsError(error instanceof Error ? error.message : "Unable to load metrics");
@@ -112,6 +131,87 @@ export default function NodeDetailPage() {
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [id, range]);
+
+  useEffect(() => {
+    if (!selectedMetric) {
+      setCustomSeries(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .nodeMetrics(id, selectedMetric, range)
+      .then((series) => {
+        if (!cancelled) setCustomSeries(series);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomSeries(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, selectedMetric, range]);
+
+  // Keep 1s live-tail boost alive while enabled; auto-reverts via agent TTL if tab closes.
+  useEffect(() => {
+    if (!liveTail) return;
+    let active = true;
+    const boost = async () => {
+      try {
+        await api.setNodeStreamRate(id, 1, 60);
+        if (active) setLiveTailMsg("Streaming at 1s resolution");
+      } catch (e: unknown) {
+        if (active) {
+          setLiveTail(false);
+          setLiveTailMsg(
+            e instanceof Error ? e.message : "Live tail requires an online agent and admin token",
+          );
+        }
+      }
+    };
+    boost();
+    const renew = setInterval(boost, 45000);
+    return () => {
+      active = false;
+      clearInterval(renew);
+    };
+  }, [id, liveTail]);
+
+  // Append incoming WebSocket telemetry samples straight into the live charts.
+  useLiveStream((e) => {
+    if (e.type !== "telemetry" || e.node_id !== id || !e.scalars || !e.ts) return;
+    const ts = e.ts;
+    const scalars = e.scalars;
+    if (scalars.cpu_usage_pct !== undefined) {
+      setCpu((prev) =>
+        prev
+          ? {
+              ...prev,
+              points: [...prev.points.slice(-179), { ts, value: scalars.cpu_usage_pct }],
+            }
+          : prev,
+      );
+    }
+    if (scalars.ram_usage_pct !== undefined) {
+      setRam((prev) =>
+        prev
+          ? {
+              ...prev,
+              points: [...prev.points.slice(-179), { ts, value: scalars.ram_usage_pct }],
+            }
+          : prev,
+      );
+    }
+    if (selectedMetric && scalars[selectedMetric] !== undefined) {
+      setCustomSeries((prev) =>
+        prev
+          ? {
+              ...prev,
+              points: [...prev.points.slice(-179), { ts, value: scalars[selectedMetric] }],
+            }
+          : prev,
+      );
+    }
+  });
 
   useEffect(() => {
     const element = chartContainer.current;
@@ -187,6 +287,20 @@ export default function NodeDetailPage() {
     cpu: p.value,
     ram: ram?.points[i]?.value ?? null,
   }));
+  const customChartData = (customSeries?.points ?? []).map((p) => ({
+    ts: new Date(p.ts).toLocaleTimeString(),
+    value: p.value,
+  }));
+  const hardware = node.hardware_info as Record<string, unknown> | null;
+  const location = node.last_location as {
+    lat: number;
+    lon: number;
+    accuracy_m?: number;
+    zone?: string;
+    source?: string;
+    updated_at?: string;
+  } | null;
+  const battery = t.battery as { pct?: number; charging?: boolean; temperature_c?: number } | null;
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
@@ -196,20 +310,110 @@ export default function NodeDetailPage() {
 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold">{node.hostname}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold">{node.hostname}</h1>
+            <Badge variant="secondary">{node.device_class ?? "server"}</Badge>
+            {node.platform && <Badge variant="secondary">{node.platform}</Badge>}
+          </div>
           <p className="break-words text-sm text-muted-foreground">
             {node.client_group} · {node.os ?? "?"} {node.arch ?? "?"} · {node.kernel ?? "?"} · agent{" "}
             {node.agent_version ?? "?"}
           </p>
         </div>
-        <StatusBadge status={node.status} />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={liveTail ? "default" : "outline"}
+            onClick={() => {
+              setLiveTailMsg(null);
+              setLiveTail((v) => !v);
+            }}
+          >
+            <Radio className={`mr-1.5 h-3.5 w-3.5 ${liveTail ? "animate-pulse" : ""}`} />
+            {liveTail ? "1s Live Tail ON" : "1s Live Tail"}
+          </Button>
+          <StatusBadge status={node.status} />
+        </div>
       </header>
+
+      {liveTailMsg && (
+        <p className="text-xs text-muted-foreground">{liveTailMsg}</p>
+      )}
+
+      {(hardware || battery || location) && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {hardware && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <Cpu className="h-4 w-4 text-muted-foreground" />
+                  Hardware
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-xs text-muted-foreground">
+                {Boolean(hardware.vendor || hardware.model) && (
+                  <div className="font-medium text-foreground">
+                    {[hardware.vendor, hardware.model].filter(Boolean).join(" ")}
+                  </div>
+                )}
+                {Boolean(hardware.cpu) && <div>CPU: {String(hardware.cpu)}</div>}
+                {Boolean(hardware.cpu_cores) && <div>Cores: {String(hardware.cpu_cores)}</div>}
+              </CardContent>
+            </Card>
+          )}
+
+          {battery && battery.pct !== undefined && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <Battery className="h-4 w-4 text-muted-foreground" />
+                  Power &amp; Battery
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-xs text-muted-foreground">
+                <div className="text-base font-semibold text-foreground">
+                  {battery.pct.toFixed(0)}% {battery.charging ? "(Charging)" : "(On battery)"}
+                </div>
+                {battery.temperature_c !== undefined && (
+                  <div>Battery temp: {battery.temperature_c.toFixed(1)} °C</div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {location && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  Device Tracking
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-xs text-muted-foreground">
+                {location.zone && <div className="font-medium text-foreground">{location.zone}</div>}
+                <div>
+                  {location.lat.toFixed(5)}, {location.lon.toFixed(5)}
+                  {location.accuracy_m ? ` (±${Math.round(location.accuracy_m)}m)` : ""}
+                </div>
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}#map=15/${location.lat}/${location.lon}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block text-primary underline underline-offset-4"
+                >
+                  Open in Map →
+                </a>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card className="min-w-0 overflow-hidden">
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle>CPU / RAM</CardTitle>
           <div className="flex gap-1">
-            {[6, 24, 168, 720].map((h) => (
+            {[1, 6, 24, 168, 720].map((h) => (
               <button
                 key={h}
                 onClick={() => setRange(h)}
@@ -243,10 +447,58 @@ export default function NodeDetailPage() {
             ) : null}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            resolution: {cpu?.resolution ?? "-"}
+            resolution: {liveTail ? "1s live-tail" : (cpu?.resolution ?? "-")}
           </p>
         </CardContent>
       </Card>
+
+      {metricCatalog.length > 0 && (
+        <Card className="min-w-0 overflow-hidden">
+          <CardHeader className="space-y-2">
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              Metric Explorer ({metricCatalog.length} discovered)
+            </CardTitle>
+            <div className="flex flex-wrap gap-1.5">
+              {metricCatalog.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSelectedMetric(m)}
+                  className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${
+                    selectedMetric === m
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-48 w-full overflow-hidden">
+              {customChartData.length === 0 ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  No samples in this time window for {selectedMetric}.
+                </div>
+              ) : chartWidth > 0 ? (
+                <AreaChart width={chartWidth} height={192} data={customChartData}>
+                  <XAxis dataKey="ts" tick={{ fontSize: 10 }} minTickGap={40} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Area
+                    dataKey="value"
+                    name={selectedMetric ?? "value"}
+                    stroke="#0ea5e9"
+                    fill="#0ea5e933"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid min-w-0 gap-4 md:grid-cols-2">
         <Card className="min-w-0">

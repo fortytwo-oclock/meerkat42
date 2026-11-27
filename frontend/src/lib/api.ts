@@ -1,8 +1,23 @@
 // Typed client for the Control Plane Hub REST + WebSocket API.
 
+export type DeviceClass = "server" | "workstation" | "mobile" | "iot" | "container_host";
+
+export interface DeviceLocation {
+  lat: number;
+  lon: number;
+  accuracy_m?: number;
+  altitude_m?: number;
+  speed_mps?: number;
+  zone?: string;
+  source?: string;
+  updated_at?: string;
+}
+
 export interface NodeSummary {
   node_id: string;
   hostname: string;
+  device_class?: DeviceClass;
+  platform?: string | null;
   arch: string | null;
   client_group: string;
   status: "ONLINE" | "STALE" | "OFFLINE" | "UNKNOWN";
@@ -17,6 +32,8 @@ export interface NodeSummary {
   container_updates_available: number;
   zfs_pools_count: number;
   zfs_degraded_count: number;
+  battery_pct?: number | null;
+  last_location?: DeviceLocation | null;
 }
 
 export interface AlertEvent {
@@ -38,10 +55,20 @@ export interface LicenseInfo {
   max_nodes: number;
   current_nodes_count: number;
   features: string[];
+  enterprise_features?: Record<string, boolean>;
   expires_at: number;
   is_unlimited: boolean;
   is_custom_license: boolean;
   white_label_logo: string | null;
+}
+
+export interface EnterpriseFeatureItem {
+  key: string;
+  name: string;
+  category: string;
+  description: string;
+  tier: string;
+  enabled: boolean;
 }
 
 export interface Group {
@@ -220,10 +247,14 @@ async function j<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   currentPrincipal: () => j<PrincipalInfo>(`/api/v1/auth/me`),
-  nodes: (group?: string) =>
-    j<{ nodes: NodeSummary[]; total: number }>(
-      `/api/v1/nodes${group ? `?client_group=${encodeURIComponent(group)}` : ""}`,
-    ),
+  nodes: (group?: string, deviceClass?: string, platform?: string) => {
+    const qs = new URLSearchParams();
+    if (group) qs.set("client_group", group);
+    if (deviceClass) qs.set("device_class", deviceClass);
+    if (platform) qs.set("platform", platform);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return j<{ nodes: NodeSummary[]; total: number }>(`/api/v1/nodes${suffix}`);
+  },
   node: (id: string) => j<any>(`/api/v1/nodes/${encodeURIComponent(id)}`),
   deleteNode: (id: string) =>
     j<{ deleted: string }>(`/api/v1/nodes/${encodeURIComponent(id)}`, {
@@ -231,7 +262,16 @@ export const api = {
     }),
   nodeMetrics: (id: string, metric: string, rangeHours = 6) =>
     j<MetricSeries>(
-      `/api/v1/nodes/${encodeURIComponent(id)}/metrics?metric=${metric}&range_hours=${rangeHours}`,
+      `/api/v1/nodes/${encodeURIComponent(id)}/metrics?metric=${encodeURIComponent(metric)}&range_hours=${rangeHours}`,
+    ),
+  nodeMetricsCatalog: (id: string) =>
+    j<{ node_id: string; metrics: string[]; total: number }>(
+      `/api/v1/nodes/${encodeURIComponent(id)}/metrics/catalog`,
+    ),
+  setNodeStreamRate: (id: string, interval_sec = 1, ttl_sec = 60) =>
+    j<{ node_id: string; command_id: string; interval_sec: number; ttl_sec: number }>(
+      `/api/v1/nodes/${encodeURIComponent(id)}/stream-rate`,
+      { method: "POST", body: JSON.stringify({ interval_sec, ttl_sec }) },
     ),
   alerts: (group?: string) =>
     j<{ alerts: AlertEvent[]; total: number }>(
@@ -240,6 +280,12 @@ export const api = {
   ackAlert: (id: string) =>
     j(`/api/v1/alerts/${id}/ack`, { method: "POST" }),
   license: () => j<LicenseInfo>(`/api/v1/license`),
+  licenseFeatures: () =>
+    j<{
+      active_tier: string;
+      community_features: string[];
+      enterprise_features: EnterpriseFeatureItem[];
+    }>(`/api/v1/license/features`),
   applyLicense: (license_token: string) =>
     j<{ success: boolean; claims: Record<string, unknown> }>(`/api/v1/license`, {
       method: "POST",

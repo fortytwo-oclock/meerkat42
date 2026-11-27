@@ -94,3 +94,43 @@ func TestHandleCommandWithoutHandler(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
+
+func TestHandleSetStreamRate(t *testing.T) {
+	conn, results := websocketPair(t)
+	client := NewClient(Config{}, nil)
+	client.conn = conn
+
+	client.handleCommand(telemetry.HubCommand{
+		CommandID: "cmd-rate-1",
+		Action:    "set_stream_rate",
+		Payload:   map[string]interface{}{"interval_sec": float64(1), "ttl_sec": float64(30)},
+	})
+	result := awaitResult(t, results)
+	if !result.OK || result.Action != "set_stream_rate" {
+		t.Fatalf("expected OK set_stream_rate, got %#v", result)
+	}
+	select {
+	case upd := <-client.rateUpdateCh:
+		if upd.interval != 1*time.Second || upd.ttl != 30*time.Second {
+			t.Fatalf("unexpected update: %+v", upd)
+		}
+	default:
+		t.Fatal("expected rate update in channel")
+	}
+}
+
+func TestHandleSetStreamRateRejectsOutOfBounds(t *testing.T) {
+	conn, results := websocketPair(t)
+	client := NewClient(Config{}, nil)
+	client.conn = conn
+
+	client.handleCommand(telemetry.HubCommand{
+		CommandID: "cmd-rate-bad",
+		Action:    "set_stream_rate",
+		Payload:   map[string]interface{}{"interval_sec": float64(0)},
+	})
+	result := awaitResult(t, results)
+	if result.OK || result.Error == "" {
+		t.Fatalf("expected validation error, got %#v", result)
+	}
+}

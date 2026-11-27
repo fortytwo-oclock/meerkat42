@@ -4,17 +4,22 @@ Start with one document and follow links only when you need more depth.
 
 ## New operators
 
-1. [Getting started](getting-started.md) — install the Hub and dashboard,
-   connect an agent, verify the deployment, update it, or remove it.
-2. [Platform support](platform-support.md) — Raspberry Pi, ARM, 32-bit agents,
+1. [Getting started](getting-started.md) — install the Hub and dashboard with
+   Docker, connect an agent, verify the deployment, update it, or remove it.
+2. [Native (non-Docker) install](native-install.md) — straight Linux systemd
+   installation of the Hub and dashboard with zero Docker dependency.
+3. [Platform support](platform-support.md) — Raspberry Pi, ARM, 32-bit agents,
    native binaries, and hardware acceptance checks.
-3. [External access](external-access.md) — publish the dashboard safely with
+4. [External access](external-access.md) — publish the dashboard safely with
    Pangolin, Caddy, Nginx Proxy Manager, or a private network.
 
 ## Operators
 
 - [Deployment guide](../deploy/README.md) — cloud topology, reverse proxy,
   PostgreSQL, Redis, and deployment boundaries.
+- [App Store & Enterprise distribution](store-publishing.md) — publishing the
+  unified Flutter app to Microsoft Store, Apple App Store / Mac App Store,
+  Google Play, and Enterprise MDM (Intune, ABM, Managed Google Play).
 - [Disaster recovery](disaster-recovery.md) — backup targets, restore commands,
   and recovery drills.
 

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hub.db.session import get_session
 from hub.deps import get_tenant_id, get_tenant_license_manager, require_admin
-from hub.license_manager import LicenseError, LicenseManager
+from hub.license_manager import COMMUNITY_FEATURES, LicenseError, LicenseManager
 from hub.repositories import licenses as lic_repo
 from hub.repositories import nodes as nodes_repo
 from hub.schemas import LicenseSubmit
@@ -26,10 +26,22 @@ async def get_license(
         "max_nodes": lm.max_nodes,
         "current_nodes_count": count,
         "features": lm.claims.get("features"),
+        "enterprise_features": lm.enterprise_entitlements(),
         "expires_at": lm.claims.get("exp"),
         "is_unlimited": lm.is_unlimited,
         "is_custom_license": lm.raw_token is not None,
         "white_label_logo": lm.claims.get("white_label_logo"),
+    }
+
+
+@router.get("/license/features")
+async def get_license_features(
+    lm: LicenseManager = Depends(get_tenant_license_manager),
+) -> dict:
+    return {
+        "active_tier": lm.claims.get("tier"),
+        "community_features": list(COMMUNITY_FEATURES),
+        "enterprise_features": lm.feature_catalog(),
     }
 
 

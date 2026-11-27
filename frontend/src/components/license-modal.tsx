@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { api, type LicenseInfo } from "@/lib/api";
+import { api, type EnterpriseFeatureItem, type LicenseInfo } from "@/lib/api";
 
 export function LicenseModal({
   open,
@@ -21,6 +21,15 @@ export function LicenseModal({
   const [token, setToken] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [catalog, setCatalog] = useState<EnterpriseFeatureItem[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    api
+      .licenseFeatures()
+      .then((res) => setCatalog(res.enterprise_features))
+      .catch(() => setCatalog([]));
+  }, [open, license?.active_tier]);
 
   const usage = license
     ? license.is_unlimited
@@ -47,7 +56,7 @@ export function LicenseModal({
     <Dialog open={open} onClose={onClose}>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">License</h2>
+          <h2 className="text-base font-semibold">License &amp; Edition</h2>
           {license && (
             <Badge variant={license.is_custom_license ? "default" : "secondary"}>
               {license.active_tier}
@@ -59,8 +68,8 @@ export function LicenseModal({
           <div className="space-y-1 text-sm text-muted-foreground">
             <div>{license.customer_name}</div>
             <div>
-              Nodes: {license.current_nodes_count} /{" "}
-              {license.is_unlimited ? "∞" : license.max_nodes}
+              Monitored devices: {license.current_nodes_count} /{" "}
+              {license.is_unlimited ? "Unlimited (Open Core)" : license.max_nodes}
             </div>
             {!license.is_unlimited && (
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -73,6 +82,24 @@ export function LicenseModal({
             {license.expires_at > 0 && (
               <div>Expires: {new Date(license.expires_at * 1000).toLocaleDateString()}</div>
             )}
+          </div>
+        )}
+
+        {catalog.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium">Enterprise capabilities</div>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+              {catalog.map((f) => (
+                <div key={f.key} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate" title={f.description}>
+                    {f.name}
+                  </span>
+                  <Badge variant={f.enabled ? "default" : "secondary"}>
+                    {f.enabled ? "Active" : "Enterprise"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

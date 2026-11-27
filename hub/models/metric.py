@@ -20,7 +20,7 @@ class MetricPoint(Base):
     node_id: Mapped[str] = mapped_column(
         ForeignKey("nodes.node_id", ondelete="CASCADE")
     )
-    metric: Mapped[str] = mapped_column(String(64))
+    metric: Mapped[str] = mapped_column(String(128))
     ts: Mapped[datetime] = mapped_column(TZDateTime)
     value: Mapped[float] = mapped_column()
 
@@ -39,7 +39,7 @@ class MetricRollup(Base):
     node_id: Mapped[str] = mapped_column(
         ForeignKey("nodes.node_id", ondelete="CASCADE")
     )
-    metric: Mapped[str] = mapped_column(String(64))
+    metric: Mapped[str] = mapped_column(String(128))
     window: Mapped[str] = mapped_column(String(8))
     bucket_start: Mapped[datetime] = mapped_column(TZDateTime)
     avg_value: Mapped[float] = mapped_column()

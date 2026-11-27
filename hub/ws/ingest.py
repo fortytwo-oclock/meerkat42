@@ -107,6 +107,9 @@ async def agent_stream(websocket: WebSocket) -> None:
                 client_group=identity.group_slug or handshake.get("client_group", "default"),
                 agent_version=handshake.get("agent_version", "1.0.0"),
                 remote_ip=client_ip,
+                device_class=handshake.get("device_class"),
+                platform=handshake.get("platform"),
+                hardware_info=handshake.get("hardware"),
             )
             # A completed authenticated handshake is positive proof that the
             # node recovered. Do not wait for the watchdog to infer a state

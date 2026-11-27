@@ -14,6 +14,10 @@ Next.js native compiler, so its production baseline is 64-bit.
 | Edge agent | Linux ARM64 (`arm64`) | Supported | Pi 3/4/5 with 64-bit OS, ARM servers |
 | Edge agent | Linux ARMv7 32-bit (`armv7`) | Supported | Pi 2 and 32-bit Pi 3/4 images |
 | Edge agent | Linux ARMv6 32-bit (`armv6`) | Supported, constrained | Pi 1, Pi Zero, Pi Zero W |
+| Edge agent | macOS Apple Silicon (`darwin-arm64`) | Supported | MacBook, Mac Studio, Mac mini (M-series) |
+| Edge agent | macOS Intel (`darwin-amd64`) | Supported | Intel Macs |
+| Edge agent | Windows x86-64 (`windows-amd64`) | Supported | Windows 10/11 PCs and Windows Server |
+| Edge agent | Windows ARM64 (`windows-arm64`) | Supported | Snapdragon / ARM64 Windows laptops |
 | Full headend | Linux x86-64 (`amd64`) | Supported | VM, mini PC, server |
 | Full headend | Linux ARM64 (`arm64`) | Supported | Pi 4/5, ARM VM or server |
 | Full headend | 32-bit x86 or ARM | Not supported | Use the device as an agent instead |

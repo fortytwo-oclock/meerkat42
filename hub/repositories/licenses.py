@@ -43,7 +43,7 @@ async def set_active(
         customer_name=claims.get("customer_name", "Community Edition User"),
         issuer=claims.get("iss"),
         subject=claims.get("sub"),
-        max_nodes=int(claims.get("max_nodes", 3)),
+        max_nodes=int(claims.get("max_nodes", -1)),
         features=list(claims.get("features", [])),
         white_label_logo=claims.get("white_label_logo"),
         issued_at=_dt(claims.get("iat")),

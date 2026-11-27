@@ -124,7 +124,23 @@ func buildCommandHandler(proxmoxClient *proxmox.Client, dockerClient *dockerctl.
 }
 
 func main() {
-	log.Println("=== Starting Distributed Control Plane Edge Agent (v1.0.0-open-core) ===")
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "version", "--version", "-v":
+			fmt.Printf("meerkat42-agent %s (%s/%s, platform=%s, default_class=%s)\n",
+				telemetry.AgentVersion, runtime.GOOS, runtime.GOARCH,
+				telemetry.NormalizedPlatform(), telemetry.DefaultDeviceClass())
+			return
+		case "service":
+			if err := runServiceCommand(os.Args[2:]); err != nil {
+				log.Fatalf("[Service] %v", err)
+			}
+			return
+		}
+	}
+
+	log.Printf("=== Starting Meerkat42 Edge Agent (%s, %s/%s) ===",
+		telemetry.AgentVersion, telemetry.NormalizedPlatform(), runtime.GOARCH)
 
 	hubURL := getEnv("HUB_URL", "ws://localhost:8080/api/v1/agent/stream")
 	nodeID := getEnv("NODE_ID", "")
@@ -147,6 +163,7 @@ func main() {
 	}
 
 	log.Printf("[Init] Node ID:      %s", nodeID)
+	log.Printf("[Init] Device Class: %s (%s/%s)", telemetry.DefaultDeviceClass(), telemetry.NormalizedPlatform(), runtime.GOARCH)
 	log.Printf("[Init] Target Hub:   %s", hubURL)
 	log.Printf("[Init] Client Group: %s", clientGroup)
 	log.Printf("[Init] Push Cadence: Every %d seconds", intervalSec)
@@ -165,9 +182,12 @@ func main() {
 		HubURL:         hubURL,
 		NodeID:         nodeID,
 		Hostname:       collector.Hostname(),
+		Platform:       telemetry.NormalizedPlatform(),
+		DeviceClass:    telemetry.DefaultDeviceClass(),
 		Arch:           runtime.GOARCH,
 		AuthToken:      authToken,
 		ClientGroup:    clientGroup,
+		Hardware:       collector.HardwareInfo(),
 		PushInterval:   time.Duration(intervalSec) * time.Second,
 		CommandHandler: buildCommandHandler(proxmoxClient, dockerClient),
 	}
