@@ -1,0 +1,27 @@
+[Unit]
+Description=Meerkat42 Control Plane Hub
+Documentation=https://github.com/fortytwo-oclock/meerkat42
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__INSTALL_DIR__
+EnvironmentFile=__CONFIG_DIR__/hub.env
+ExecStart=__INSTALL_DIR__/.venv/bin/uvicorn hub.main:app --host __BIND_HOST__ --port __HUB_PORT__
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__DATA_DIR__
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

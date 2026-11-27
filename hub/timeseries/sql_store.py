@@ -46,13 +46,30 @@ class SqlMetricStore(MetricStore):
                 .subquery()
             )
             rows = await s.execute(
-                select(MetricPoint.metric, MetricPoint.value).join(
+                select(MetricPoint.metric, MetricPoint.value)
+                .where(MetricPoint.node_id == node_id)
+                .join(
                     sub,
                     (MetricPoint.metric == sub.c.metric)
                     & (MetricPoint.ts == sub.c.mx),
                 )
             )
             return {m: v for m, v in rows.all()}
+
+    async def list_metrics(self, node_id: str) -> list[str]:
+        async with session_scope() as s:
+            raw_rows = await s.execute(
+                select(MetricPoint.metric)
+                .where(MetricPoint.node_id == node_id)
+                .distinct()
+            )
+            rollup_rows = await s.execute(
+                select(MetricRollup.metric)
+                .where(MetricRollup.node_id == node_id)
+                .distinct()
+            )
+            discovered = {r[0] for r in raw_rows.all()} | {r[0] for r in rollup_rows.all()}
+            return sorted(discovered)
 
     async def query(
         self,

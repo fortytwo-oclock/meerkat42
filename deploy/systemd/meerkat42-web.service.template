@@ -1,0 +1,29 @@
+[Unit]
+Description=Meerkat42 Web Dashboard
+Documentation=https://github.com/fortytwo-oclock/meerkat42
+After=network-online.target meerkat42-hub.service
+Wants=meerkat42-hub.service
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__INSTALL_DIR__/frontend
+Environment=NODE_ENV=production
+Environment=PORT=__WEB_PORT__
+Environment=HOSTNAME=__BIND_HOST__
+Environment=HUB_URL=http://127.0.0.1:__HUB_PORT__
+ExecStart=__NPM_BIN__ run start
+Restart=on-failure
+RestartSec=3
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

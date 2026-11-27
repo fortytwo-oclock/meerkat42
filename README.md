@@ -63,7 +63,8 @@ API proxy.
 
 | If you are… | Start here |
 |---|---|
-| Trying Meerkat42 on one computer | [Self-hosted quickstart](#quickstart) |
+| Trying Meerkat42 on one computer (Docker) | [Self-hosted quickstart](#quickstart) |
+| Installing natively without Docker (Linux `systemd`) | [Native Hub install](docs/native-install.md) |
 | Running the headend on a Raspberry Pi 4/5 | [Raspberry Pi guide](docs/platform-support.md#raspberry-pi-45-headend) |
 | Monitoring an older Pi or 32-bit machine | [Agent platform matrix](docs/platform-support.md#support-matrix) |
 | Building a larger production installation | [PostgreSQL and Redis deployment](deploy/README.md#cloud-deployment) |
@@ -101,9 +102,9 @@ SSD-backed storage.
 Native agents are built for:
 
 - Linux x86-64 and x86 32-bit
-- Linux ARM64
-- Linux ARMv7, including Pi 2 and 32-bit Pi 3/4 installations
-- Linux ARMv6, including Pi 1 and Pi Zero
+- Linux ARM64, ARMv7 (Pi 2/3/4 32-bit), and ARMv6 (Pi 1/Zero)
+- macOS Apple Silicon (`darwin-arm64`) and Intel (`darwin-amd64`)
+- Windows x86-64 (`windows-amd64`) and ARM64 (`windows-arm64`)
 
 See [Platform support](docs/platform-support.md) for limitations, native
 installation, container builds, and the hardware acceptance checklist.

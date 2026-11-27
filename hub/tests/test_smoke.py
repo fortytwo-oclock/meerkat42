@@ -210,7 +210,10 @@ class HubSmokeTest(unittest.TestCase):
         self.assertEqual(license_response.status_code, 200)
         license_info = license_response.json()
         self.assertEqual(license_info["active_tier"], "community")
-        self.assertEqual(license_info["max_nodes"], 3)
+        self.assertEqual(license_info["max_nodes"], -1)
+        self.assertTrue(license_info["is_unlimited"])
+        self.assertIn("enterprise_features", license_info)
+        self.assertFalse(license_info["enterprise_features"]["sso_oidc"])
 
         nodes_response = self.client.get("/api/v1/nodes")
         self.assertEqual(nodes_response.status_code, 200)

@@ -32,7 +32,7 @@ class LicenseRecord(Base):
     customer_name: Mapped[str] = mapped_column(String(200), default="Community Edition User")
     issuer: Mapped[Optional[str]] = mapped_column(String(200), default=None)
     subject: Mapped[Optional[str]] = mapped_column(String(200), default=None)
-    max_nodes: Mapped[int] = mapped_column(default=3)  # -1 = unlimited
+    max_nodes: Mapped[int] = mapped_column(default=-1)  # -1 = unlimited
     features: Mapped[list] = mapped_column(default=list)
     white_label_logo: Mapped[Optional[str]] = mapped_column(String(500), default=None)
 

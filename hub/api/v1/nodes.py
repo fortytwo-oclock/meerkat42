@@ -11,8 +11,10 @@ from hub.models.node import NodeStatus
 from hub.repositories import groups as groups_repo
 from hub.repositories import nodes as nodes_repo
 from hub.repositories import remote as remote_repo
+from hub.schemas import StreamRateRequest
 from hub.timeseries import MetricStore
 from hub.timeseries.base import extract_scalars
+from hub.ws.bus import bus
 
 router = APIRouter()
 
@@ -23,6 +25,8 @@ def _summary(node, group_slug: str) -> dict:
     return {
         "node_id": node.node_id,
         "hostname": node.hostname,
+        "device_class": node.device_class or "server",
+        "platform": node.platform,
         "arch": node.arch,
         "client_group": group_slug,
         "status": node.status.value if hasattr(node.status, "value") else node.status,
@@ -37,12 +41,16 @@ def _summary(node, group_slug: str) -> dict:
         "container_updates_available": int(s["container_updates_available"]),
         "zfs_pools_count": int(s["zfs_pools_count"]),
         "zfs_degraded_count": int(s["zfs_degraded_count"]),
+        "battery_pct": s.get("battery.pct"),
+        "last_location": node.last_location,
     }
 
 
 @router.get("/nodes")
 async def list_nodes(
     client_group: str | None = Query(default=None),
+    device_class: str | None = Query(default=None),
+    platform: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
     scope: str | None = Depends(viewer_scope),
@@ -50,7 +58,13 @@ async def list_nodes(
     if scope:
         client_group = scope
     groups = {g.id: g.slug for g in await groups_repo.list_groups(session, tenant_id)}
-    nodes = await nodes_repo.list_for_tenant(session, tenant_id, group_slug=client_group)
+    nodes = await nodes_repo.list_for_tenant(
+        session,
+        tenant_id,
+        group_slug=client_group,
+        device_class=device_class,
+        platform=platform,
+    )
     results = [_summary(n, groups.get(n.group_id, "default")) for n in nodes]
     return {"nodes": results, "total": len(results)}
 
@@ -73,6 +87,8 @@ async def get_node(
         "node_id": node.node_id,
         "hostname": node.hostname,
         "os": node.os,
+        "platform": node.platform,
+        "device_class": node.device_class or "server",
         "arch": node.arch,
         "kernel": node.kernel,
         "agent_version": node.agent_version,
@@ -83,6 +99,8 @@ async def get_node(
         "last_seen": node.last_seen,
         "client_group": group.slug if group else "default",
         "labels": node.labels,
+        "hardware_info": node.hardware_info,
+        "last_location": node.last_location,
         "latest_telemetry": node.last_telemetry,
     }
 
@@ -123,6 +141,25 @@ async def delete_node(
     return {"deleted": node_id}
 
 
+@router.get("/nodes/{node_id}/metrics/catalog")
+async def node_metrics_catalog(
+    node_id: str,
+    session: AsyncSession = Depends(get_session),
+    store: MetricStore = Depends(get_metric_store),
+    tenant_id: str = Depends(get_tenant_id),
+    scope: str | None = Depends(viewer_scope),
+) -> dict:
+    node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    if scope:
+        groups = {g.id: g.slug for g in await groups_repo.list_groups(session, tenant_id)}
+        if groups.get(node.group_id) != scope:
+            raise HTTPException(status_code=404, detail="Node not found")
+    metrics = await store.list_metrics(node_id)
+    return {"node_id": node_id, "metrics": metrics, "total": len(metrics)}
+
+
 @router.get("/nodes/{node_id}/metrics")
 async def node_metrics(
     node_id: str,
@@ -148,4 +185,32 @@ async def node_metrics(
         "metric": metric,
         "resolution": series.resolution,
         "points": [{"ts": p.ts, "value": p.value} for p in series.points],
+    }
+
+
+@router.post("/nodes/{node_id}/stream-rate")
+async def set_node_stream_rate(
+    node_id: str,
+    req: StreamRateRequest,
+    session: AsyncSession = Depends(get_session),
+    tenant_id: str = Depends(get_tenant_id),
+    _: Principal = Depends(require_admin),
+) -> dict:
+    """Temporarily adjust a connected agent's push cadence (e.g. 1s live-tail)."""
+    node = await nodes_repo.get_for_tenant(session, tenant_id, node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    command_id = await bus.send_command(
+        node_id,
+        "set_stream_rate",
+        {"interval_sec": req.interval_sec, "ttl_sec": req.ttl_sec},
+        tenant_id=tenant_id,
+    )
+    if command_id is None:
+        raise HTTPException(status_code=409, detail="Node is not currently connected")
+    return {
+        "node_id": node_id,
+        "command_id": command_id,
+        "interval_sec": req.interval_sec,
+        "ttl_sec": req.ttl_sec,
     }

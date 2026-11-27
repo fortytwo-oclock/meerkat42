@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LicenseSubmit(BaseModel):
@@ -46,10 +46,17 @@ class MuteRequest(BaseModel):
     minutes: int = 60
 
 
+class StreamRateRequest(BaseModel):
+    interval_sec: int = Field(default=1, ge=1, le=300)
+    ttl_sec: int = Field(default=60, ge=10, le=600)
+
+
 class NodeSummary(BaseModel):
     node_id: str
     hostname: str
     client_group: str
+    device_class: str = "server"
+    platform: Optional[str] = None
     status: str
     last_seen: Optional[datetime]
     cpu_usage_pct: float
