@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -11,6 +12,14 @@ from hub.models.node import DeviceClass, NodeStatus, VALID_DEVICE_CLASSES, VALID
 from hub.repositories import groups as groups_repo
 
 _settings = get_settings()
+
+
+def _is_finite_number(raw: object) -> bool:
+    return (
+        not isinstance(raw, bool)
+        and isinstance(raw, (int, float))
+        and math.isfinite(float(raw))
+    )
 
 
 def _normalize_device_class(raw: object) -> str | None:
@@ -45,7 +54,7 @@ def _sanitize_location(raw: object) -> dict | None:
         return None
     lat = raw.get("lat")
     lon = raw.get("lon")
-    if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+    if not _is_finite_number(lat) or not _is_finite_number(lon):
         return None
     if not (-90.0 <= float(lat) <= 90.0 and -180.0 <= float(lon) <= 180.0):
         return None
@@ -55,7 +64,7 @@ def _sanitize_location(raw: object) -> dict | None:
         "updated_at": str(raw.get("updated_at") or datetime.now(timezone.utc).isoformat()),
     }
     for num_key in ("accuracy_m", "altitude_m", "speed_mps"):
-        if isinstance(raw.get(num_key), (int, float)):
+        if _is_finite_number(raw.get(num_key)):
             clean[num_key] = float(raw[num_key])
     for str_key in ("zone", "source"):
         if isinstance(raw.get(str_key), str) and raw[str_key].strip():

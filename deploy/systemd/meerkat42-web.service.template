@@ -10,6 +10,7 @@ User=__USER__
 Group=__USER__
 WorkingDirectory=__INSTALL_DIR__/frontend
 Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
 Environment=PORT=__WEB_PORT__
 Environment=HOSTNAME=__BIND_HOST__
 Environment=HUB_URL=http://127.0.0.1:__HUB_PORT__
@@ -22,6 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ReadWritePaths=__INSTALL_DIR__/frontend/.next
 CapabilityBoundingSet=
 AmbientCapabilities=
 

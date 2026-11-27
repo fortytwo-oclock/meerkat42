@@ -112,9 +112,17 @@ class Settings(BaseSettings):
     billing_smtp_starttls: bool = True
     billing_smtp_timeout_seconds: float = 10.0
 
-    # --- Multi-tenancy -------------------------------------------------
+    # --- Multi-tenancy & Custom Subdomains -----------------------------
     default_tenant_slug: str = "default"
     default_group_slug: str = "default"
+    # Base domain for Managed Cloud vanity subdomains (e.g. "openmeerkat.com"
+    # maps "<slug>.openmeerkat.com" to Tenant.slug). Empty = single-host mode.
+    cloud_base_domain: str = ""
+    cloud_primary_url: str = "https://app.openmeerkat.com"
+    cloud_reserved_subdomains: str = "www,api,app,docs,status,mail,cdn,admin,default"
+
+    # --- Built-in Model Context Protocol (MCP) AI Server ---------------
+    mcp_enabled: bool = True
 
     # --- Native / single-process static UI ----------------------------
     # Optional path to a pre-built static dashboard directory served at `/`
@@ -129,10 +137,19 @@ class Settings(BaseSettings):
     oidc_provider_name: str = ""
     oidc_issuer_url: str = ""
     oidc_authorization_endpoint: str = ""
+    oidc_token_endpoint: str = ""
+    oidc_jwks_uri: str = ""
     oidc_client_id: str = ""
     oidc_client_secret: str = ""
     oidc_redirect_uri: str = ""
     oidc_scopes: str = "openid email profile"
+    oidc_owner_groups: str = ""  # comma-separated IdP group names -> Role.OWNER
+    oidc_admin_groups: str = ""  # comma-separated IdP group names -> Role.ADMIN
+
+    # --- Enterprise Time-Series Backend (`long_retention`) ------------
+    # "sql" (default SQLite/Postgres) or "timescale" (PostgreSQL + TimescaleDB)
+    metric_store: str = "sql"
+    ts_enterprise_retention_days: int = 365
 
     @property
     def is_sqlite(self) -> bool:

@@ -78,6 +78,37 @@ def _diagnostic(payload: dict) -> dict:
     return {"diagnostic": payload["diagnostic"]}
 
 
+def _migrate_hub(payload: dict) -> dict:
+    allowed_keys = {"hub_url", "enrollment_token", "verify_tls"}
+    if not set(payload).issubset(allowed_keys) or "hub_url" not in payload:
+        raise CommandPolicyError(
+            "migrate_hub requires hub_url and optional enrollment_token / verify_tls"
+        )
+    raw_url = payload.get("hub_url")
+    if not isinstance(raw_url, str) or len(raw_url.strip()) > 512:
+        raise CommandPolicyError("invalid hub_url")
+    from urllib.parse import urlsplit
+
+    url = raw_url.strip().rstrip("/")
+    parsed = urlsplit(url)
+    is_local_http = parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if parsed.scheme != "https" and not is_local_http:
+        raise CommandPolicyError("hub_url must use https:// (or http://localhost for dev)")
+    if not parsed.netloc:
+        raise CommandPolicyError("hub_url must include a host")
+    out: dict = {"hub_url": url}
+    if "enrollment_token" in payload and payload["enrollment_token"] is not None:
+        tok = payload["enrollment_token"]
+        if not isinstance(tok, str) or not tok.strip() or len(tok) > 512:
+            raise CommandPolicyError("invalid enrollment_token")
+        out["enrollment_token"] = tok.strip()
+    if "verify_tls" in payload:
+        if not isinstance(payload["verify_tls"], bool):
+            raise CommandPolicyError("verify_tls must be a boolean")
+        out["verify_tls"] = payload["verify_tls"]
+    return out
+
+
 POLICIES: dict[str, CommandPolicy] = {
     "ping": CommandPolicy(destructive=False, validate=_empty),
     "proxmox_start": CommandPolicy(destructive=False, validate=_proxmox_guest, timeout_seconds=120),
@@ -95,6 +126,9 @@ POLICIES: dict[str, CommandPolicy] = {
     ),
     "diagnostic_run": CommandPolicy(
         destructive=False, validate=_diagnostic, timeout_seconds=30, emergency=True
+    ),
+    "migrate_hub": CommandPolicy(
+        destructive=True, validate=_migrate_hub, timeout_seconds=60
     ),
 }
 

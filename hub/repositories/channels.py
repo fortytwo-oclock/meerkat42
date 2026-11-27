@@ -9,7 +9,7 @@ from hub.models import NotificationChannel
 
 # config keys that are themselves credentials — a webhook URL grants posting
 # rights, so it is fingerprinted, not echoed back in full.
-_MASK_FULL = ("password", "headers", "token")
+_MASK_FULL = ("password", "headers", "token", "api_key", "tokens")
 _FINGERPRINT = ("url",)
 
 

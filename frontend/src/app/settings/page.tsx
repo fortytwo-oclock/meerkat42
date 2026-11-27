@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { EnterpriseSettingsPanel } from "@/components/enterprise-settings-panel";
+import { MigrationAndMcpPanel } from "@/components/migration-and-mcp-panel";
 import { Switch } from "@/components/ui/switch";
 import {
   setAdminToken,
@@ -675,6 +677,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+      <MigrationAndMcpPanel />
+      <EnterpriseSettingsPanel />
     </main>
   );
 }

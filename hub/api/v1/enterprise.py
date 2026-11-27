@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -23,10 +23,16 @@ from hub.deps import (
 )
 from hub.ee import require_enterprise_feature
 from hub.ee.audit_export import fetch_audit_events, render_ndjson
-from hub.ee.oidc import build_authorization_request, public_sso_config
+from hub.ee.oidc import (
+    OidcError,
+    build_authorization_request,
+    exchange_code_and_verify,
+    public_sso_config,
+)
 from hub.license_manager import LicenseManager
 from hub.models import GeofenceZone, PushDevice
 from hub.repositories import remote as remote_repo
+from hub.repositories import tokens as tokens_repo
 
 router = APIRouter()
 
@@ -112,13 +118,14 @@ async def register_push_device(
 async def list_push_devices(
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
-    _: Principal = Depends(authenticate),
+    principal: Principal = Depends(authenticate),
 ) -> dict:
-    rows = await session.execute(
-        select(PushDevice)
-        .where(PushDevice.tenant_id == tenant_id)
-        .order_by(PushDevice.last_seen_at.desc())
-    )
+    from hub.models.auth import Role
+
+    stmt = select(PushDevice).where(PushDevice.tenant_id == tenant_id)
+    if not principal.can(Role.ADMIN):
+        stmt = stmt.where(PushDevice.principal_label == principal.label)
+    rows = await session.execute(stmt.order_by(PushDevice.last_seen_at.desc()))
     devices = [
         {
             "id": d.id,
@@ -138,8 +145,10 @@ async def delete_push_device(
     device_id: str,
     session: AsyncSession = Depends(get_session),
     tenant_id: str = Depends(get_tenant_id),
-    _: Principal = Depends(authenticate),
+    principal: Principal = Depends(authenticate),
 ) -> dict:
+    from hub.models.auth import Role
+
     device = (
         await session.execute(
             select(PushDevice).where(
@@ -149,6 +158,8 @@ async def delete_push_device(
     ).scalar_one_or_none()
     if device is None:
         raise HTTPException(status_code=404, detail="Push device not found")
+    if not principal.can(Role.ADMIN) and device.principal_label != principal.label:
+        raise HTTPException(status_code=403, detail="Cannot remove another principal's push device")
     await session.delete(device)
     await session.commit()
     return {"deleted": device_id}
@@ -287,15 +298,67 @@ async def get_sso_config(
     return public_sso_config(get_settings(), lm)
 
 
+class OidcCallbackRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=2048)
+    state: str = Field(..., min_length=8, max_length=512)
+
+
 @router.get("/sso/login-url")
 async def get_sso_login_url(
-    lm: LicenseManager = Depends(get_tenant_license_manager),
+    lm: LicenseManager = Depends(get_license_manager),
 ) -> dict:
     require_enterprise_feature(lm, "sso_oidc")
     try:
         return build_authorization_request(get_settings())
-    except ValueError as exc:
+    except (ValueError, OidcError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/sso/callback")
+async def sso_callback(
+    req: OidcCallbackRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    lm: LicenseManager = Depends(get_license_manager),
+) -> dict:
+    """Complete OIDC PKCE flow: verify ID token via JWKS and issue a scoped Meerkat42 API token."""
+    require_enterprise_feature(lm, "sso_oidc")
+    try:
+        verified = await exchange_code_and_verify(
+            get_settings(),
+            code=req.code,
+            state=req.state,
+        )
+    except OidcError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    tenant_id = request.app.state.default_tenant_id
+    identity = verified["identity"]
+    role = verified["role"]
+    tok, raw = await tokens_repo.create(
+        session,
+        tenant_id=tenant_id,
+        name=f"sso:{identity}"[:200],
+        role=role,
+        group_id=None,
+        created_by="oidc-sso",
+    )
+    await remote_repo.append_audit(
+        session,
+        tenant_id=tenant_id,
+        actor=identity,
+        action="sso.login",
+        target_type="api_token",
+        target_id=tok.id,
+        details={"sub": verified["sub"], "role": role.value},
+    )
+    await session.commit()
+    return {
+        "token": raw,
+        "token_id": tok.id,
+        "identity": identity,
+        "role": role.value,
+    }
 
 
 # -- Enterprise SIEM Audit Export (`audit_export` license feature) ------------

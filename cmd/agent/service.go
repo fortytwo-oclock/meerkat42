@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,7 +11,29 @@ import (
 	"strings"
 )
 
+func xmlEscape(s string) string {
+	var buf bytes.Buffer
+	_ = xml.EscapeText(&buf, []byte(s))
+	return buf.String()
+}
+
+func sanitizeEnvValue(s string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+}
+
+func renderEnvFile(hubURL, authToken, deviceClass string) string {
+	return fmt.Sprintf("HUB_URL=%s\nAUTH_TOKEN=%s\nDEVICE_CLASS=%s\n",
+		sanitizeEnvValue(hubURL),
+		sanitizeEnvValue(authToken),
+		sanitizeEnvValue(deviceClass),
+	)
+}
+
 func renderServiceDefinition(binPath, hubURL, authToken, deviceClass string) (string, string) {
+	hubURL = sanitizeEnvValue(hubURL)
+	authToken = sanitizeEnvValue(authToken)
+	deviceClass = sanitizeEnvValue(deviceClass)
+
 	switch runtime.GOOS {
 	case "darwin":
 		plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
@@ -41,20 +65,26 @@ func renderServiceDefinition(binPath, hubURL, authToken, deviceClass string) (st
   <string>/var/log/meerkat42-agent.err.log</string>
 </dict>
 </plist>
-`, binPath, hubURL, authToken, deviceClass)
+`, xmlEscape(binPath), xmlEscape(hubURL), xmlEscape(authToken), xmlEscape(deviceClass))
 		return "/Library/LaunchDaemons/com.meerkat42.agent.plist", plist
 	case "windows":
 		script := fmt.Sprintf(
-			`$env:HUB_URL="%s"; $env:AUTH_TOKEN="%s"; $env:DEVICE_CLASS="%s"
+			`$env:HUB_URL='%s'; $env:AUTH_TOKEN='%s'; $env:DEVICE_CLASS='%s'
 # Register as a scheduled startup task (runs under SYSTEM):
-$action = New-ScheduledTaskAction -Execute "%s"
+$action = New-ScheduledTaskAction -Execute '%s'
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
 Register-ScheduledTask -TaskName "Meerkat42Agent" -Action $action -Trigger $trigger -Principal $principal -Force
 Start-ScheduledTask -TaskName "Meerkat42Agent"
-`, hubURL, authToken, deviceClass, binPath)
+`,
+			strings.ReplaceAll(hubURL, "'", "''"),
+			strings.ReplaceAll(authToken, "'", "''"),
+			strings.ReplaceAll(deviceClass, "'", "''"),
+			strings.ReplaceAll(binPath, "'", "''"),
+		)
 		return "Meerkat42Agent (Windows Task/Service)", script
 	default:
+		// Secrets live in a separate 0600 EnvironmentFile, never in the 0644 unit file.
 		unit := fmt.Sprintf(`[Unit]
 Description=Meerkat42 Edge Monitoring Agent
 After=network-online.target
@@ -62,16 +92,14 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-Environment=HUB_URL=%s
-Environment=AUTH_TOKEN=%s
-Environment=DEVICE_CLASS=%s
+EnvironmentFile=/etc/meerkat42-agent.env
 ExecStart=%s
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-`, hubURL, authToken, deviceClass, binPath)
+`, binPath)
 		return "/etc/systemd/system/meerkat42-agent.service", unit
 	}
 }
@@ -99,18 +127,25 @@ func runServiceCommand(args []string) error {
 	switch sub {
 	case "render":
 		fmt.Printf("# Target: %s\n%s", destPath, body)
+		if runtime.GOOS == "linux" {
+			fmt.Printf("\n# EnvironmentFile (/etc/meerkat42-agent.env, mode 0600):\n%s", renderEnvFile(hubURL, authToken, deviceClass))
+		}
 		return nil
 	case "install":
 		switch runtime.GOOS {
 		case "linux":
-			if err := os.WriteFile(destPath, []byte(body), 0o600); err != nil {
+			const envPath = "/etc/meerkat42-agent.env"
+			if err := os.WriteFile(envPath, []byte(renderEnvFile(hubURL, authToken, deviceClass)), 0o600); err != nil {
+				return fmt.Errorf("write %s (run as root): %w", envPath, err)
+			}
+			if err := os.WriteFile(destPath, []byte(body), 0o644); err != nil {
 				return fmt.Errorf("write %s (run as root): %w", destPath, err)
 			}
 			_ = exec.Command("systemctl", "daemon-reload").Run()
 			if err := exec.Command("systemctl", "enable", "--now", "meerkat42-agent.service").Run(); err != nil {
 				return fmt.Errorf("systemctl enable failed: %w", err)
 			}
-			fmt.Printf("Installed and started %s\n", destPath)
+			fmt.Printf("Installed %s (secrets in %s, mode 0600)\n", destPath, envPath)
 			return nil
 		case "darwin":
 			if err := os.WriteFile(destPath, []byte(body), 0o600); err != nil {
@@ -132,7 +167,7 @@ func runServiceCommand(args []string) error {
 			_ = exec.Command("systemctl", "disable", "--now", "meerkat42-agent.service").Run()
 			_ = os.Remove(destPath)
 			_ = exec.Command("systemctl", "daemon-reload").Run()
-			fmt.Printf("Removed %s\n", destPath)
+			fmt.Printf("Removed %s (kept /etc/meerkat42-agent.env)\n", destPath)
 			return nil
 		case "darwin":
 			_ = exec.Command("launchctl", "unload", "-w", destPath).Run()

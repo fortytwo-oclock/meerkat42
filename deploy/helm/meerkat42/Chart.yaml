@@ -1,0 +1,15 @@
+apiVersion: v2
+name: meerkat42
+description: Meerkat42 Open Core & Enterprise Cloud Monitoring Control Plane
+type: application
+version: 2.0.0
+appVersion: "2.0.0"
+keywords:
+  - monitoring
+  - observability
+  - netdata-alternative
+  - fleet-management
+  - device-tracking
+home: https://github.com/fortytwo-oclock/meerkat42
+sources:
+  - https://github.com/fortytwo-oclock/meerkat42

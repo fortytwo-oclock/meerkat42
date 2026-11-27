@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-hub
+  labels:
+    app.kubernetes.io/name: meerkat42-hub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.hub.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: meerkat42-hub
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: meerkat42-hub
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: hub
+          image: "{{ .Values.hub.image.repository }}:{{ .Values.hub.image.tag }}"
+          imagePullPolicy: {{ .Values.hub.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.hub.port }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          env:
+            - name: BACKGROUND_WORKERS_ENABLED
+              value: "false"
+            - name: AUTO_MIGRATE
+              value: {{ .Values.config.autoMigrate | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: CORS_ORIGINS
+              value: {{ .Values.config.corsOrigins | quote }}
+            - name: PUSH_RELAY_URL
+              value: {{ .Values.config.pushRelayUrl | quote }}
+            - name: OIDC_PROVIDER_NAME
+              value: {{ .Values.config.oidcProviderName | quote }}
+            - name: OIDC_ISSUER_URL
+              value: {{ .Values.config.oidcIssuerUrl | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.config.oidcClientId | quote }}
+            - name: OIDC_REDIRECT_URI
+              value: {{ .Values.config.oidcRedirectUri | quote }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.hub.resources | nindent 12 }}

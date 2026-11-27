@@ -55,11 +55,18 @@ async def authenticate(
     x_tenant_slug: str | None = Header(default=None),
 ) -> Principal:
     presented = _bearer(authorization, x_admin_token)
+    effective_slug = x_tenant_slug
+    if not effective_slug:
+        from hub.tenant_routing import extract_subdomain_slug
+
+        effective_slug = extract_subdomain_slug(
+            request.headers.get("host"), get_settings()
+        )
     return await authenticate_presented(
         session,
         presented=presented,
         default_tenant_id=request.app.state.default_tenant_id,
-        tenant_slug=x_tenant_slug,
+        tenant_slug=effective_slug,
     )
 
 

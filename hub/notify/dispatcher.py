@@ -76,7 +76,21 @@ async def _deliver(
         ):
             continue  # picked up next cycle
         try:
-            sender = build_sender(ch.kind, ch.config or {})
+            cfg = dict(ch.config or {})
+            if ch.kind == "push_relay" and not cfg.get("tokens"):
+                from hub.models import PushDevice
+
+                dev_rows = await session.execute(
+                    select(PushDevice).where(
+                        PushDevice.tenant_id == ch.tenant_id,
+                        PushDevice.enabled.is_(True),
+                    )
+                )
+                cfg["tokens"] = [
+                    {"platform": d.platform, "token": d.device_token}
+                    for d in dev_rows.scalars()
+                ]
+            sender = build_sender(ch.kind, cfg)
             await sender.send(_payload(event, node, group_slug, state))
             ch.last_sent_at = now
             ch.last_error = None

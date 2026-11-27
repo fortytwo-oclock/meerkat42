@@ -7,7 +7,18 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Meerkat App</string>
+	<string>Meerkat42</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.fortytwooclock.meerkatApp.enroll</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meerkat42</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,6 +58,19 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Meerkat42 optionally reports device coordinates when you enable opt-in device tracking.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Meerkat42 uses significant location updates only when enterprise device tracking or geofencing is explicitly enabled.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.fortytwooclock.meerkatApp.telemetryRefresh</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

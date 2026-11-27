@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-hub
+spec:
+  selector:
+    app.kubernetes.io/name: meerkat42-hub
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.hub.port }}
+      targetPort: http
+---
+{{- if .Values.web.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-web
+spec:
+  selector:
+    app.kubernetes.io/name: meerkat42-web
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: http
+      port: {{ .Values.web.port }}
+      targetPort: http
+{{- end }}

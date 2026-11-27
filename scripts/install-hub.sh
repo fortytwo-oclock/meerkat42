@@ -211,7 +211,11 @@ else
   # shellcheck disable=SC1090
   source "$ENV_FILE"
   set +a
-  (cd "$INSTALL_DIR" && sudo -u "$SERVICE_USER" -E "${INSTALL_DIR}/.venv/bin/python" -m alembic upgrade head)
+  if command -v runuser >/dev/null 2>&1; then
+    (cd "$INSTALL_DIR" && runuser -u "$SERVICE_USER" -- "${INSTALL_DIR}/.venv/bin/python" -m alembic upgrade head)
+  else
+    (cd "$INSTALL_DIR" && su -s /bin/sh "$SERVICE_USER" -c "\"${INSTALL_DIR}/.venv/bin/python\" -m alembic upgrade head")
+  fi
 fi
 
 # 8. Render & enable systemd units

@@ -384,6 +384,161 @@ export const api = {
       method: "POST",
       headers: { "Idempotency-Key": crypto.randomUUID() },
     }),
+
+  pushDevices: () =>
+    j<{
+      devices: {
+        id: string;
+        platform: string;
+        device_name: string;
+        principal: string;
+        enabled: boolean;
+        last_seen_at: string;
+      }[];
+      total: number;
+    }>(`/api/v1/push/devices`),
+  deletePushDevice: (id: string) =>
+    j<{ deleted: string }>(`/api/v1/push/devices/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  geofences: () =>
+    j<{
+      geofences: {
+        id: string;
+        name: string;
+        lat: number;
+        lon: number;
+        radius_m: number;
+        alert_on_exit: boolean;
+        alert_on_enter: boolean;
+        severity: string;
+        enabled: boolean;
+      }[];
+      total: number;
+    }>(`/api/v1/geofences`),
+  createGeofence: (body: {
+    name: string;
+    lat: number;
+    lon: number;
+    radius_m: number;
+    alert_on_exit?: boolean;
+    alert_on_enter?: boolean;
+    severity?: string;
+  }) =>
+    j(`/api/v1/geofences`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteGeofence: (id: string) =>
+    j<{ deleted: string }>(`/api/v1/geofences/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  ssoConfig: () =>
+    j<{
+      licensed: boolean;
+      configured: boolean;
+      enabled: boolean;
+      provider_name: string;
+      issuer_url: string | null;
+      authorization_endpoint: string | null;
+      scopes: string;
+    }>(`/api/v1/sso/config`),
+
+  exportAuditLogsText: async (format: "ndjson" | "json" = "ndjson") => {
+    const res = await fetch(`${BASE}/api/v1/audit/export?format=${format}`, {
+      headers: { ...adminHeader() },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `${res.status} ${res.statusText}`);
+    }
+    return res.text();
+  },
+
+  fleetSummary: () =>
+    j<{
+      generated_at: string;
+      total_nodes: number;
+      total_groups: number;
+      by_status: Record<string, number>;
+      by_platform: Record<string, number>;
+      by_device_class: Record<string, number>;
+      active_alerts_count: number;
+      active_alerts_by_severity: Record<string, number>;
+    }>(`/api/v1/fleet/summary`),
+
+  tenantRouting: () =>
+    j<{
+      tenant_slug: string;
+      tenant_name: string;
+      mode: "cloud" | "self_hosted";
+      cloud_primary_url: string;
+      cloud_base_domain: string | null;
+      vanity_subdomain_url: string | null;
+      mcp_endpoint: string;
+      export_endpoint: string;
+      import_endpoint: string;
+    }>(`/api/v1/tenant/routing`),
+
+  updateTenantRouting: (body: { slug?: string; name?: string }) =>
+    j<{
+      tenant_slug: string;
+      tenant_name: string;
+      mode: "cloud" | "self_hosted";
+      cloud_primary_url: string;
+      cloud_base_domain: string | null;
+      vanity_subdomain_url: string | null;
+      mcp_endpoint: string;
+      export_endpoint: string;
+      import_endpoint: string;
+    }>(`/api/v1/tenant/routing`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  exportTenantWorkspace: (includeSecrets = false, includeTelemetry = false) =>
+    j<Record<string, unknown>>(
+      `/api/v1/tenant/export?include_secrets=${includeSecrets}&include_telemetry=${includeTelemetry}`,
+    ),
+
+  importTenantWorkspace: (bundle: Record<string, unknown>, importNodes = true) =>
+    j<{ ok: boolean; counts: Record<string, number>; warnings: string[] }>(
+      `/api/v1/tenant/import`,
+      {
+        method: "POST",
+        body: JSON.stringify({ bundle, import_nodes: importNodes }),
+      },
+    ),
+
+  migrateAgentsToHub: (body: {
+    hub_url: string;
+    enrollment_token?: string;
+    verify_tls?: boolean;
+    all_nodes?: boolean;
+    node_ids?: string[];
+  }) =>
+    j<{ ok: boolean; target_hub_url: string; queued_count: number }>(
+      `/api/v1/tenant/migrate-agents`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
+
+  mcpManifest: () =>
+    j<{
+      enabled: boolean;
+      server: { name: string; version: string };
+      protocol_version: string;
+      transport: string;
+      endpoint: string;
+      authentication: string;
+      tools: string[];
+      resources: string[];
+    }>(`/api/v1/mcp/manifest`),
 };
 
 export function wsUrl(path: string): string {

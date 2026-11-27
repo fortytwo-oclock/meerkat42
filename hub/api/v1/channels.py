@@ -19,7 +19,7 @@ from hub.schemas import ChannelCreate, ChannelUpdate, MuteRequest
 log = logging.getLogger("hub.channels")
 router = APIRouter()
 
-_KINDS = {"discord", "slack", "smtp", "webhook"}
+_KINDS = {"discord", "slack", "smtp", "webhook", "push_relay"}
 _URL_KINDS = {"discord", "slack", "webhook"}
 
 
@@ -27,6 +27,19 @@ async def _check_url(kind: str, config: dict) -> None:
     if kind in _URL_KINDS:
         try:
             await asyncio.to_thread(validate_webhook_url, config.get("url", ""), kind)
+        except ChannelError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+    elif kind == "push_relay":
+        from hub.config import get_settings
+
+        url = (config.get("url") or get_settings().push_relay_url).strip()
+        if not url:
+            raise HTTPException(
+                status_code=422,
+                detail="push_relay channel requires config.url or PUSH_RELAY_URL",
+            )
+        try:
+            await asyncio.to_thread(validate_webhook_url, url, "webhook")
         except ChannelError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 

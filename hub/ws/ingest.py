@@ -142,10 +142,17 @@ async def agent_stream(websocket: WebSocket) -> None:
                         session, tenant_id, enabled_only=True
                     )
                     await alerting.evaluate(session, node, data, rules)
-                    if node.last_location is not None and lm.has_feature("geofencing"):
-                        from hub.ee.geofencing import evaluate_geofences
+                    if node.last_location is not None:
+                        from hub.repositories import licenses as license_repo
+                        from hub.license_manager import LicenseManager
 
-                        await evaluate_geofences(session, tenant_id, node)
+                        cur_rec = await license_repo.get_active(session, tenant_id)
+                        cur_lm = LicenseManager()
+                        cur_lm.load_from_record(cur_rec.raw_token if cur_rec else None, {})
+                        if cur_lm.has_feature("geofencing"):
+                            from hub.ee.geofencing import evaluate_geofences
+
+                            await evaluate_geofences(session, tenant_id, node)
 
             await store.write(node_id, ts, extract_scalars(data))
             await bus.publish(

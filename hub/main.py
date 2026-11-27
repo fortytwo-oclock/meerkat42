@@ -86,6 +86,16 @@ async def lifespan(app: FastAPI):
     app.state.metric_store = SqlMetricStore()
     await _init_schema()
     await _seed(app)
+    if (
+        settings.metric_store.strip().lower() == "timescale"
+        and not settings.is_sqlite
+        and app.state.license_manager.has_feature("long_retention")
+    ):
+        from hub.ee.timescale_store import TimescaleMetricStore
+
+        ts_store = TimescaleMetricStore(retention_days=settings.ts_enterprise_retention_days)
+        if await ts_store.ensure_hypertable():
+            app.state.metric_store = ts_store
     await bus.start(
         settings.redis_url,
         prefix=settings.redis_prefix,
@@ -110,6 +120,7 @@ async def lifespan(app: FastAPI):
         stop.set()
         await asyncio.gather(*tasks, return_exceptions=True)
         await bus.stop()
+        await engine.dispose()
 
 
 def create_app() -> FastAPI:

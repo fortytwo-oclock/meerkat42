@@ -58,6 +58,7 @@ type Client struct {
 	conn         *websocket.Conn
 	mu           sync.Mutex
 	stopCh       chan struct{}
+	stopOnce     sync.Once
 	rateUpdateCh chan streamRateUpdate
 }
 
@@ -320,8 +321,10 @@ func (c *Client) closeConnection() {
 	}
 }
 
-// Stop terminates the client.
+// Stop terminates the client safely and idempotently.
 func (c *Client) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
 	c.closeConnection()
 }

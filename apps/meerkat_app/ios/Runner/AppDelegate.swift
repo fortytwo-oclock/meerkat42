@@ -12,5 +12,18 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    let channel = FlutterMethodChannel(
+      name: "com.fortytwooclock.meerkat/managed_config",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      if call.method == "getManagedConfig" {
+        let managed = UserDefaults.standard.dictionary(forKey: "com.apple.configuration.managed")
+        result(managed)
+      } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }

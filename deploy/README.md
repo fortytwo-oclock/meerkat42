@@ -117,3 +117,24 @@ placeholders, and follow [`docs/platform-support.md`](../docs/platform-support.m
 Older 32-bit Raspberry Pis are supported as edge agents through the ARMv6 and
 ARMv7 native builds. The complete dashboard headend is not supported on 32-bit
 systems because its maintained Node/Next.js container toolchain is 64-bit only.
+
+## Kubernetes (Helm)
+
+For multi-replica cloud or Enterprise Kubernetes deployments (EKS, GKE, AKS, k3s),
+install the included Helm chart at `deploy/helm/meerkat42`:
+
+```bash
+kubectl create secret generic meerkat42-secrets \
+  --from-literal=DATABASE_URL="postgresql+asyncpg://user:pass@postgres:5432/meerkat42" \
+  --from-literal=REDIS_URL="redis://redis:6379/0" \
+  --from-literal=ADMIN_TOKEN="$(openssl rand -base64 32)" \
+  --from-literal=AGENT_BOOTSTRAP_TOKEN="$(openssl rand -base64 32)"
+
+helm upgrade --install meerkat42 deploy/helm/meerkat42 \
+  --set ingress.host=monitor.example.com \
+  --set config.corsOrigins=https://monitor.example.com
+```
+
+Run `python -m hub.bootstrap` once per release as a pre-upgrade migration job,
+keep `worker.enabled=true` (singleton replica), and scale `hub.replicas` freely
+behind any WebSocket-capable Ingress controller.

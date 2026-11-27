@@ -70,14 +70,18 @@ class Phase5EnterpriseTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        tenant_id = app.state.default_tenant_id
+        cls.client.__exit__(None, None, None)
+
         from sqlalchemy import delete as sql_delete
-        from hub.db.session import session_scope
+        from hub.db.session import engine, session_scope
         from hub.license_manager import COMMUNITY_CLAIMS
         from hub.models import GeofenceZone, PushDevice
         from hub.repositories import licenses as lic_repo
         from hub.repositories import nodes as nodes_repo
 
         async def _cleanup() -> None:
+            await engine.dispose()
             async with session_scope() as session:
                 node = await nodes_repo.get(session, "phone-ops-1")
                 if node is not None:
@@ -86,14 +90,14 @@ class Phase5EnterpriseTest(unittest.TestCase):
                 await session.execute(sql_delete(PushDevice))
                 await lic_repo.set_active(
                     session,
-                    app.state.default_tenant_id,
+                    tenant_id,
                     raw_token=None,
                     claims=COMMUNITY_CLAIMS,
                 )
+            await engine.dispose()
 
         asyncio.run(_cleanup())
         app.state.license_manager.reset_to_community()
-        cls.client.__exit__(None, None, None)
 
         settings = get_settings()
         (
@@ -118,7 +122,16 @@ class Phase5EnterpriseTest(unittest.TestCase):
         res = self.client.post("/api/v1/license", json={"license_token": token})
         self.assertEqual(res.status_code, 200, res.text)
 
-    def test_push_device_registration_lifecycle(self) -> None:
+    def test_01_community_blocks_enterprise_features_with_402(self) -> None:
+        self.assertEqual(self.client.get("/api/v1/geofences").status_code, 402)
+        self.assertEqual(self.client.get("/api/v1/sso/login-url").status_code, 402)
+        self.assertEqual(self.client.get("/api/v1/audit/export").status_code, 402)
+
+        sso_cfg = self.client.get("/api/v1/sso/config").json()
+        self.assertFalse(sso_cfg["licensed"])
+        self.assertFalse(sso_cfg["enabled"])
+
+    def test_02_push_device_registration_lifecycle(self) -> None:
         reg = self.client.post(
             "/api/v1/push/devices",
             json={
@@ -139,33 +152,7 @@ class Phase5EnterpriseTest(unittest.TestCase):
         self.assertEqual(deleted.status_code, 200)
         self.assertEqual(self.client.get("/api/v1/push/devices").json()["total"], 0)
 
-    def test_community_blocks_enterprise_features_with_402(self) -> None:
-        # Ensure Community edition is active
-        from hub.db.session import session_scope
-        from hub.license_manager import COMMUNITY_CLAIMS
-        from hub.repositories import licenses as lic_repo
-
-        async def _reset() -> None:
-            async with session_scope() as session:
-                await lic_repo.set_active(
-                    session,
-                    app.state.default_tenant_id,
-                    raw_token=None,
-                    claims=COMMUNITY_CLAIMS,
-                )
-
-        asyncio.run(_reset())
-        app.state.license_manager.reset_to_community()
-
-        self.assertEqual(self.client.get("/api/v1/geofences").status_code, 402)
-        self.assertEqual(self.client.get("/api/v1/sso/login-url").status_code, 402)
-        self.assertEqual(self.client.get("/api/v1/audit/export").status_code, 402)
-
-        sso_cfg = self.client.get("/api/v1/sso/config").json()
-        self.assertFalse(sso_cfg["licensed"])
-        self.assertFalse(sso_cfg["enabled"])
-
-    def test_enterprise_geofencing_sso_and_siem_audit_export(self) -> None:
+    def test_03_enterprise_geofencing_sso_and_siem_audit_export(self) -> None:
         self._apply_enterprise_features(["geofencing", "sso_oidc", "audit_export"])
 
         # 1. OIDC SSO discovery + PKCE authorization URL
@@ -264,6 +251,74 @@ class Phase5EnterpriseTest(unittest.TestCase):
         json_resp = self.client.get("/api/v1/audit/export?format=json")
         self.assertEqual(json_resp.status_code, 200)
         self.assertGreaterEqual(json_resp.json()["total"], 1)
+
+    def test_04_audit_regression_push_idor_preauth_sso_redaction_and_location(self) -> None:
+        from hub.models import NotificationChannel
+        from hub.repositories import channels as ch_repo
+        from hub.repositories.nodes import _sanitize_location
+
+        # 1. Location sanitizer rejects bools and non-finite floats
+        self.assertIsNone(_sanitize_location({"lat": True, "lon": False}))
+        self.assertIsNone(_sanitize_location({"lat": float("nan"), "lon": 0.0}))
+        clean = _sanitize_location({"lat": 37.7, "lon": -122.4, "accuracy_m": float("nan")})
+        self.assertIsNotNone(clean)
+        self.assertNotIn("accuracy_m", clean or {})
+
+        # 2. Channel redaction masks push_relay api_key and tokens
+        fake_ch = NotificationChannel(
+            id="ch-1",
+            tenant_id="t-1",
+            name="Mobile Push",
+            kind="push_relay",
+            config={
+                "url": "https://push.meerkat42.io/v1/send",
+                "api_key": "super-secret-relay-key",
+                "tokens": [{"platform": "ios", "token": "apns-secret"}],
+            },
+            min_severity="WARNING",
+            enabled=True,
+        )
+        redacted = ch_repo.redact(fake_ch)
+        self.assertEqual(redacted["config"]["api_key"], "***")
+        self.assertEqual(redacted["config"]["tokens"], "***")
+
+        # 3. Pre-auth client can call /api/v1/sso/login-url when sso_oidc is licensed
+        self._apply_enterprise_features(["sso_oidc"])
+        sso_login = self.client.get("/api/v1/sso/login-url", headers={"Authorization": ""})
+        self.assertEqual(sso_login.status_code, 200, sso_login.text)
+        self.assertIn("code_challenge_method=S256", sso_login.json()["authorization_url"])
+
+        # 4. Viewer cannot delete an owner's push device (IDOR protection)
+        owner_dev = self.client.post(
+            "/api/v1/push/devices",
+            json={
+                "platform": "ios",
+                "device_token": "owner-apns-token-987654321",
+                "device_name": "Owner Phone",
+            },
+        )
+        self.assertEqual(owner_dev.status_code, 200)
+        owner_dev_id = owner_dev.json()["id"]
+
+        viewer_tok = self.client.post(
+            "/api/v1/tokens",
+            json={"name": "audit-viewer", "role": "viewer"},
+        )
+        self.assertEqual(viewer_tok.status_code, 201, viewer_tok.text)
+        v_headers = {"Authorization": f"Bearer {viewer_tok.json()['token']}"}
+
+        # Viewer does not see owner's push device
+        v_list = self.client.get("/api/v1/push/devices", headers=v_headers)
+        self.assertEqual(v_list.status_code, 200)
+        self.assertEqual(v_list.json()["total"], 0)
+
+        # Viewer gets 403 trying to delete owner's push device
+        v_del = self.client.delete(f"/api/v1/push/devices/{owner_dev_id}", headers=v_headers)
+        self.assertEqual(v_del.status_code, 403)
+
+        # Clean up so subsequent tests see a clean push_devices table
+        self.assertEqual(self.client.delete(f"/api/v1/push/devices/{owner_dev_id}").status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/v1/tokens/{viewer_tok.json()['id']}").status_code, 200)
 
 
 if __name__ == "__main__":

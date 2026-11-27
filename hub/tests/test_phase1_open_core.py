@@ -92,28 +92,33 @@ class Phase1IntegrationTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        # Leave the shared test DB clean for subsequent test modules.
+        # Exit TestClient first so its event loop releases all SQLite handles
+        # before cleanup runs on a fresh asyncio loop.
+        tenant_id = app.state.default_tenant_id
+        cls.client.__exit__(None, None, None)
+
         import asyncio
-        from hub.db.session import session_scope
+        from hub.db.session import engine, session_scope
         from hub.license_manager import COMMUNITY_CLAIMS
         from hub.repositories import licenses as lic_repo
         from hub.repositories import nodes as nodes_repo
 
         async def _cleanup() -> None:
+            await engine.dispose()
             async with session_scope() as session:
                 node = await nodes_repo.get(session, "mbp-alice")
                 if node is not None:
                     await nodes_repo.delete(session, node)
                 await lic_repo.set_active(
                     session,
-                    app.state.default_tenant_id,
+                    tenant_id,
                     raw_token=None,
                     claims=COMMUNITY_CLAIMS,
                 )
+            await engine.dispose()
 
         asyncio.run(_cleanup())
         app.state.license_manager.reset_to_community()
-        cls.client.__exit__(None, None, None)
 
         settings = get_settings()
         (

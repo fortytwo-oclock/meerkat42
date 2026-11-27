@@ -13,7 +13,9 @@ from hub.api.v1 import (
     groups,
     health,
     licenses,
+    mcp,
     metrics,
+    migration,
     nodes,
     tokens,
     vault,
@@ -36,3 +38,5 @@ api_router.include_router(enterprise.router, tags=["enterprise"])
 api_router.include_router(tokens.router, tags=["tokens"])
 api_router.include_router(vault.router, tags=["vault"])
 api_router.include_router(metrics.router, tags=["metrics"])
+api_router.include_router(migration.router, tags=["migration-and-fleet"])
+api_router.include_router(mcp.router, tags=["mcp"])
