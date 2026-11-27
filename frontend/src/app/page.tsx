@@ -2,25 +2,38 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FleetMatrix } from "@/components/fleet-matrix";
 import { AlertsPanel } from "@/components/alerts-panel";
 import { LicenseModal } from "@/components/license-modal";
+import { AddDeviceModal } from "@/components/add-device-modal";
 import {
   api,
   type AlertEvent,
   type Branding,
+  type DeviceClass,
   type Group,
   type LicenseInfo,
 } from "@/lib/api";
 
+const DEVICE_TABS: { key: DeviceClass | undefined; label: string }[] = [
+  { key: undefined, label: "All devices" },
+  { key: "server", label: "Servers" },
+  { key: "workstation", label: "Workstations" },
+  { key: "mobile", label: "Mobile" },
+  { key: "iot", label: "IoT" },
+];
+
 export default function DashboardPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [active, setActive] = useState<string | undefined>(undefined);
+  const [deviceClass, setDeviceClass] = useState<DeviceClass | undefined>(undefined);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [branding, setBranding] = useState<Branding | null>(null);
   const [showLicense, setShowLicense] = useState(false);
+  const [showAddDevice, setShowAddDevice] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadMeta = useCallback(async () => {
@@ -59,7 +72,7 @@ export default function DashboardPage() {
   }, [loadAlerts]);
 
   const logo = branding?.logo_url ?? license?.white_label_logo ?? null;
-  const productName = branding?.product_name ?? "Control Plane";
+  const productName = branding?.product_name ?? "Meerkat42";
 
   return (
     <main
@@ -84,11 +97,15 @@ export default function DashboardPage() {
             {license
               ? `${license.active_tier} · ${license.current_nodes_count}/${
                   license.is_unlimited ? "∞" : license.max_nodes
-                } nodes`
+                } devices`
               : "…"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setShowAddDevice(true)}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add device
+          </Button>
           <Link
             href="/settings"
             className="inline-flex h-9 items-center rounded-md border border-input px-4 text-sm font-medium hover:bg-muted"
@@ -107,30 +124,46 @@ export default function DashboardPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setActive(undefined)}
-          className={`rounded-full border px-3 py-1 text-xs ${
-            active === undefined ? "bg-primary text-primary-foreground" : ""
-          }`}
-        >
-          All clients
-        </button>
-        {groups.map((g) => (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            key={g.slug}
-            onClick={() => setActive(g.slug)}
+            onClick={() => setActive(undefined)}
             className={`rounded-full border px-3 py-1 text-xs ${
-              active === g.slug ? "bg-primary text-primary-foreground" : ""
+              active === undefined ? "bg-primary text-primary-foreground" : ""
             }`}
           >
-            {g.name} ({g.node_count})
+            All rooms
           </button>
-        ))}
+          {groups.map((g) => (
+            <button
+              key={g.slug}
+              onClick={() => setActive(g.slug)}
+              className={`rounded-full border px-3 py-1 text-xs ${
+                active === g.slug ? "bg-primary text-primary-foreground" : ""
+              }`}
+            >
+              {g.name} ({g.node_count})
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {DEVICE_TABS.map((t) => (
+            <button
+              key={t.label}
+              onClick={() => setDeviceClass(t.key)}
+              className={`rounded-md border px-2.5 py-1 text-xs ${
+                deviceClass === t.key ? "bg-secondary font-medium text-secondary-foreground" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <FleetMatrix group={active} />
+        <FleetMatrix group={active} deviceClass={deviceClass} />
         <AlertsPanel alerts={alerts} onChange={loadAlerts} />
       </div>
 
@@ -139,6 +172,12 @@ export default function DashboardPage() {
         onClose={() => setShowLicense(false)}
         license={license}
         onApplied={loadMeta}
+      />
+
+      <AddDeviceModal
+        open={showAddDevice}
+        onClose={() => setShowAddDevice(false)}
+        groups={groups}
       />
     </main>
   );
