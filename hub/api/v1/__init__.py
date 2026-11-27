@@ -9,6 +9,7 @@ from hub.api.v1 import (
     channels,
     commands,
     emergency,
+    enterprise,
     groups,
     health,
     licenses,
@@ -31,6 +32,7 @@ api_router.include_router(agent_tokens.router, tags=["agent-tokens"])
 api_router.include_router(channels.router, tags=["channels"])
 api_router.include_router(commands.router, tags=["remote-commands"])
 api_router.include_router(emergency.router, tags=["emergency"])
+api_router.include_router(enterprise.router, tags=["enterprise"])
 api_router.include_router(tokens.router, tags=["tokens"])
 api_router.include_router(vault.router, tags=["vault"])
 api_router.include_router(metrics.router, tags=["metrics"])

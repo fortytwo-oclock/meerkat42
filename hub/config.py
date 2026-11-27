@@ -121,6 +121,19 @@ class Settings(BaseSettings):
     # after `/api/*` routes for zero-Docker single-process deployments.
     static_frontend_dir: str = ""
 
+    # --- Mobile / Desktop Push Relay ----------------------------------
+    push_relay_url: str = ""
+    push_relay_api_key: str = ""
+
+    # --- Enterprise OIDC SSO (requires `sso_oidc` license feature) ----
+    oidc_provider_name: str = ""
+    oidc_issuer_url: str = ""
+    oidc_authorization_endpoint: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    oidc_scopes: str = "openid email profile"
+
     @property
     def is_sqlite(self) -> bool:
         return self.database_url.startswith("sqlite")
